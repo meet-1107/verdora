@@ -1,0 +1,128 @@
+rules_version = '2';
+
+// Query-friendly, role-based security.
+//
+// IMPORTANT: Firestore evaluates `list`/query rules WITHOUT reading the
+// documents, so a read rule that compares `resource.data.<field>` against a
+// value fetched with get() (e.g. the caller's companyId) makes every query
+// fail. Therefore READ rules here avoid `resource.data` + cross-doc get():
+// reads are gated by auth/role only, and company scoping is applied by the
+// app's query filters. WRITE rules (single-document) may safely use get().
+//
+// This is appropriate for a single-company deployment. To make company
+// isolation enforceable at query time for multi-tenant, put `companyId`/`role`
+// into custom auth claims (set by the createClientUser function) and switch
+// these rules to `request.auth.token.companyId` — claims are available to
+// query rules without a get().
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function userData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function isAdmin() {
+      return isSignedIn() &&
+        userData().role in ['admin', 'super_admin', 'manager'];
+    }
+    function isClient() {
+      return isSignedIn() && userData().role == 'client';
+    }
+    function orderOf(oid) {
+      return get(/databases/$(database)/documents/orders/$(oid)).data;
+    }
+
+    // ---- users ---------------------------------------------------------
+    match /users/{uid} {
+      allow read: if request.auth.uid == uid || isAdmin();
+      allow create, delete: if isAdmin();
+      // Admin edits anything; a user may only update their own FCM tokens.
+      allow update: if isAdmin()
+        || (request.auth.uid == uid
+            && request.resource.data.diff(resource.data)
+                 .affectedKeys().hasOnly(['fcmTokens']));
+    }
+
+    // ---- catalog (any signed-in user reads; admin writes) --------------
+    match /categories/{id}    { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /subcategories/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /products/{id}      { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /variants/{id}      { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /discounts/{id}     { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /settings/{id}      { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /import_templates/{id} { allow read, write: if isAdmin(); }
+
+    // ---- parties -------------------------------------------------------
+    match /parties/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---- orders --------------------------------------------------------
+    match /orders/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.status in ['draft', 'pending'];
+      allow update: if isAdmin();
+      // Delete: admins always; a client may delete their OWN order only while it
+      // has not yet been dispatched.
+      allow delete: if isAdmin()
+        || (isClient()
+            && resource.data.partyId == userData().partyId
+            && !(resource.data.status in
+                 ['dispatched', 'delivered', 'completed', 'returned']));
+    }
+    match /order_items/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isAdmin();
+      // Delete: admins always; a client may delete line items of their OWN order
+      // while that order is still deletable (pre-dispatch).
+      allow delete: if isAdmin()
+        || (isClient()
+            && orderOf(resource.data.orderId).partyId == userData().partyId
+            && !(orderOf(resource.data.orderId).status in
+                 ['dispatched', 'delivered', 'completed', 'returned']));
+    }
+
+    // ---- inventory (admin only) ----------------------------------------
+    match /inventory_transactions/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ---- notifications -------------------------------------------------
+    match /notifications/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin();
+      // Admin may change anything; a recipient may only flip their OWN
+      // notification's `read` flag (to mark it seen).
+      allow update: if isAdmin()
+        || (isSignedIn()
+            && resource.data.userId == request.auth.uid
+            && request.resource.data.diff(resource.data)
+                 .affectedKeys().hasOnly(['read']));
+      // A recipient may delete their own notification.
+      allow delete: if isAdmin()
+        || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    // ---- logs & counters ----------------------------------------------
+    match /logs/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+    match /invoice_counter/{id} {
+      allow read: if isAdmin();
+      allow write: if false; // Cloud Functions (Admin SDK) only.
+    }
+    // Per-client/per-day running sequence for human-facing Order IDs. The client
+    // increments this inside the order-submission transaction, so signed-in
+    // users need read+write.
+    match /order_counters/{id} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}
