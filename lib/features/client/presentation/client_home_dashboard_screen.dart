@@ -8,6 +8,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/app_category_card.dart';
 import '../../../core/widgets/app_dashboard_card.dart';
 import '../../../core/widgets/app_greeting.dart';
+import '../../../core/widgets/app_image.dart';
 import '../../../core/widgets/app_notification_button.dart';
 import '../../../core/widgets/app_quick_action_card.dart';
 import '../../../core/widgets/app_search_bar.dart';
@@ -21,6 +22,7 @@ import '../../orders/domain/order.dart';
 import '../../orders/domain/order_status.dart';
 import '../../orders/presentation/order_providers.dart';
 import '../../parties/presentation/party_providers.dart';
+import '../../settings/presentation/settings_providers.dart';
 import 'client_catalog_screen.dart';
 import 'client_categories_screen.dart';
 import 'client_invoices_screen.dart';
@@ -52,9 +54,30 @@ class ClientHomeDashboardScreen extends ConsumerWidget {
     final showSkeleton = ordersAsync.isLoading &&
         ref.watch(categoriesProvider).isLoading;
 
+    final logo =
+        appImageProvider(ref.watch(companySettingsProvider).valueOrNull?.logoUrl);
+
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: AppSpacing.lg,
+        titleSpacing: logo == null ? AppSpacing.lg : 4,
+        leadingWidth: logo == null ? null : 60,
+        leading: logo == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(left: AppSpacing.md),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: theme.colorScheme.outlineVariant),
+                  ),
+                  child: Image(image: logo, fit: BoxFit.contain),
+                ),
+              ),
         title: AppGreeting(name: name, compact: true),
         actions: [
           AppNotificationButton(

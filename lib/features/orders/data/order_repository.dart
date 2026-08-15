@@ -92,6 +92,12 @@ class OrderRepository {
         (s) => s.docs.map((d) => OrderItem.fromMap(d.id, d.data())).toList());
   }
 
+  /// Every line item in the company (admin reports & backup).
+  Stream<List<OrderItem>> watchAllItems(String companyId) {
+    return _orderItems.where('companyId', isEqualTo: companyId).snapshots().map(
+        (s) => s.docs.map((d) => OrderItem.fromMap(d.id, d.data())).toList());
+  }
+
   /// Approves an order client-side: assigns an invoice number and advances the
   /// status. Stock is NOT touched here — it is deducted when packing starts
   /// (see [markDispatched]). Runs without Cloud Functions so it works on the Spark
@@ -127,16 +133,15 @@ class OrderRepository {
     });
   }
 
-  /// Marks an order **packed** and, the first time, removes each line's quantity
-  /// from stock. Stock is deducted at PACKING-COMPLETE (packed) so the warehouse
-  /// count reflects goods pulled for shipping. [Order.stockDeducted] guards
-  /// against double-counting.
+  /// Marks an order **packed**. Stock is NOT touched here — it is deducted only
+  /// on DISPATCH (see [markDispatched]).
   Future<void> markPacked(Order order, {String? createdBy}) =>
-      _deductStockAndSetStatus(order, OrderStatus.packed,
-          createdBy: createdBy, reason: 'packed');
+      setStatus(order.id, OrderStatus.packed);
 
-  /// Moves an order to "dispatched". If stock wasn't already deducted at packing
-  /// (e.g. the order jumped straight to dispatched), it is deducted here.
+  /// Moves an order to "dispatched" and, the first time, removes each line's
+  /// quantity from stock. Stock is deducted on DISPATCH so nothing leaves the
+  /// books until the goods actually ship. [Order.stockDeducted] guards against
+  /// double-counting.
   Future<void> markDispatched(Order order, {String? createdBy}) =>
       _deductStockAndSetStatus(order, OrderStatus.dispatched,
           createdBy: createdBy, reason: 'dispatch');
@@ -237,7 +242,7 @@ class OrderRepository {
   /// `order` inventory transaction so the audit trail stays correct.
   Future<double> updateItemQuantity(
       String orderId, String itemId, int newQty,
-      {String? createdBy}) async {
+      {String? createdBy, bool markModified = true}) async {
     // Two-stage totals: line totals carry only the product discount; the stored
     // global % is re-applied to the after-product subtotal.
     final orderSnap = await _orders.doc(orderId).get();
@@ -315,7 +320,7 @@ class OrderRepository {
       'discountTotal': productDiscount + globalDiscount,
       'grandTotal': grandTotal,
       'itemCount': count,
-      'modified': true,
+      if (markModified) 'modified': true,
       'updatedAt': FieldValue.serverTimestamp(),
     });
     await batch.commit();

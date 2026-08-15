@@ -25,6 +25,18 @@ class InventoryRepository {
             (s) => s.docs.map((d) => Variant.fromMap(d.id, d.data())).toList());
   }
 
+  /// Every stock movement in the company (used to reconstruct historical stock
+  /// for backups). One-time fetch.
+  Future<List<InventoryTransaction>> allTransactions(String companyId) async {
+    final snap = await _db
+        .collection(Collections.inventoryTransactions)
+        .where('companyId', isEqualTo: companyId)
+        .get();
+    return snap.docs
+        .map((d) => InventoryTransaction.fromMap(d.id, d.data()))
+        .toList();
+  }
+
   /// Transaction history for a single variant, newest first.
   Stream<List<InventoryTransaction>> watchTransactions(String variantId) {
     return _db

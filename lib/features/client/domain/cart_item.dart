@@ -28,4 +28,22 @@ class CartItem {
         quantity: quantity ?? this.quantity,
         discountPercent: discountPercent ?? this.discountPercent,
       );
+
+  Map<String, dynamic> toJson() => {
+        'variantId': variantId,
+        'productName': productName,
+        'variantLabel': variantLabel,
+        'rate': rate,
+        'quantity': quantity,
+        'discountPercent': discountPercent,
+      };
+
+  factory CartItem.fromJson(Map<String, dynamic> m) => CartItem(
+        variantId: m['variantId'] as String? ?? '',
+        productName: m['productName'] as String? ?? '',
+        variantLabel: m['variantLabel'] as String? ?? '',
+        rate: (m['rate'] as num?)?.toDouble() ?? 0,
+        quantity: (m['quantity'] as num?)?.toInt() ?? 0,
+        discountPercent: (m['discountPercent'] as num?)?.toDouble() ?? 0,
+      );
 }

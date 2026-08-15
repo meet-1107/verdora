@@ -7,12 +7,9 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/admin_shell.dart';
 import '../../../core/widgets/app_status_chip.dart';
 import '../../../core/widgets/state_views.dart';
-import '../../activity/data/activity_repository.dart';
-import '../../auth/presentation/auth_providers.dart';
 import '../../inventory/presentation/inventory_providers.dart';
 import '../../products/domain/variant.dart';
 import '../../products/presentation/product_providers.dart';
-import '../../orders/data/order_repository.dart';
 import '../../orders/domain/order.dart';
 import '../../orders/domain/order_status.dart';
 import '../../orders/presentation/order_detail_screen.dart';
@@ -39,7 +36,6 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
     OrderStatus.dispatched,
   ];
   OrderStatus? _filter; // null = all active queue
-  bool _busy = false;
   final _lowStockKey = GlobalKey();
   final _scroll = ScrollController();
 
@@ -48,57 +44,6 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
     _scroll.dispose();
     super.dispose();
   }
-
-  Future<void> _run(Future<void> Function() action, String ok) async {
-    setState(() => _busy = true);
-    try {
-      await action();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok)));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Failed: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  void _advance(Order o) {
-    final repo = ref.read(orderRepositoryProvider);
-    final logger = ref.read(activityLoggerProvider);
-    final uid = ref.read(currentUserProvider).valueOrNull?.uid;
-    final label = o.displayId;
-    switch (o.status) {
-      case OrderStatus.approved:
-      case OrderStatus.modifiedApproved:
-        _run(() async {
-          await repo.setStatus(o.id, OrderStatus.packing);
-          await logger.record('order.packing', target: label);
-        }, 'Packing started.');
-      case OrderStatus.packing:
-        _run(() async {
-          await repo.markPacked(o, createdBy: uid);
-          await logger.record('order.packed', target: label);
-        }, 'Marked packed — stock deducted.');
-      case OrderStatus.packed:
-        _run(() async {
-          await repo.markDispatched(o, createdBy: uid);
-          await logger.record('order.dispatched', target: label);
-        }, 'Dispatched.');
-      default:
-        break;
-    }
-  }
-
-  String? _actionLabel(OrderStatus s) => switch (s) {
-        OrderStatus.approved || OrderStatus.modifiedApproved => 'Start packing',
-        OrderStatus.packing => 'Mark packed',
-        OrderStatus.packed => 'Dispatch',
-        _ => null,
-      };
 
   void _reviewLowStock() {
     final ctx = _lowStockKey.currentContext;
@@ -118,9 +63,7 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
         leading: const AdminMenuButton(),
         title: const Text('Warehouse Operations'),
       ),
-      body: AbsorbPointer(
-        absorbing: _busy,
-        child: ordersAsync.when(
+      body: ordersAsync.when(
           loading: () => const LoadingView(),
           error: (e, _) => ErrorView(
               error: e, onRetry: () => ref.invalidate(companyOrdersProvider)),
@@ -227,8 +170,6 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                   for (final o in queue)
                     _OrderCard(
                       order: o,
-                      actionLabel: _actionLabel(o.status),
-                      onAction: () => _advance(o),
                       onOpen: () => Navigator.of(context).push(
                         MaterialPageRoute(
                             builder: (_) => OrderDetailScreen(order: o)),
@@ -238,16 +179,10 @@ class _WarehouseScreenState extends ConsumerState<WarehouseScreen> {
                 const SizedBox(height: AppSpacing.xl),
                 Container(key: _lowStockKey),
                 _LowStockTable(lowStock: lowStock),
-                if (_busy)
-                  const Padding(
-                    padding: EdgeInsets.only(top: AppSpacing.md),
-                    child: LinearProgressIndicator(),
-                  ),
               ],
             );
           },
         ),
-      ),
     );
   }
 }
@@ -422,13 +357,9 @@ class _AttentionPanel extends StatelessWidget {
 class _OrderCard extends StatelessWidget {
   const _OrderCard({
     required this.order,
-    required this.actionLabel,
-    required this.onAction,
     required this.onOpen,
   });
   final Order order;
-  final String? actionLabel;
-  final VoidCallback onAction;
   final VoidCallback onOpen;
 
   @override
@@ -474,14 +405,12 @@ class _OrderCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppSpacing.sm),
-            // 4. Actions
-            Row(
-              children: [
-                OutlinedButton(onPressed: onOpen, child: const Text('Open')),
-                const Spacer(),
-                if (actionLabel != null)
-                  FilledButton(onPressed: onAction, child: Text(actionLabel!)),
-              ],
+            // 4. Action — view/open only; all workflow actions live inside the
+            // order details screen.
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                  onPressed: onOpen, child: const Text('Open')),
             ),
           ],
         ),
@@ -557,7 +486,7 @@ class _LowStockTable extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: const Row(
                   children: [
-                    Expanded(flex: 5, child: _H('PRODUCT')),
+                    Expanded(flex: 7, child: _H('PRODUCT')),
                     Expanded(flex: 2, child: _H('AVAIL.')),
                     Expanded(flex: 2, child: _H('MIN')),
                     Expanded(flex: 3, child: _H('URGENCY')),
@@ -587,20 +516,32 @@ class _LowStockTable extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            flex: 5,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(product,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w600)),
-                if (label.isNotEmpty)
-                  Text(label,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              ],
+            flex: 7,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Shrink long names to fit on a single line (no truncation).
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(product,
+                          maxLines: 1,
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  if (label.isNotEmpty)
+                    Text(label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant)),
+                ],
+              ),
             ),
           ),
           Expanded(

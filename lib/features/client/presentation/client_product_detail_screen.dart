@@ -68,7 +68,7 @@ class _ClientProductDetailScreenState
     final product = widget.product;
     final variantsAsync = ref.watch(variantsByProductProvider(product.id));
     final categories = ref.watch(categoriesProvider).valueOrNull ?? const [];
-    final party = ref.watch(currentPartyProvider).valueOrNull;
+    final party = ref.watch(orderPartyProvider);
     final resolver =
         DiscountResolver(ref.watch(discountsProvider).valueOrNull ?? const []);
 

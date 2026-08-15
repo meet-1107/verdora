@@ -1,13 +1,56 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../auth/presentation/auth_providers.dart';
 import '../domain/cart_item.dart';
 
 final cartProvider =
     NotifierProvider<CartNotifier, List<CartItem>>(CartNotifier.new);
 
+/// The client's shopping cart. Persisted to local storage (per signed-in user)
+/// so a partly-built order survives closing the app — on the next launch the
+/// same products are still in the cart.
 class CartNotifier extends Notifier<List<CartItem>> {
+  String? _uid;
+
   @override
-  List<CartItem> build() => const [];
+  List<CartItem> build() {
+    // Rebuilds when the signed-in user changes, so each dealer keeps their own
+    // saved cart and it clears on sign-out.
+    _uid = ref.watch(currentUserProvider).valueOrNull?.uid;
+    _restore(_uid);
+    return const [];
+  }
+
+  String _key(String? uid) => 'client_cart_${uid ?? 'anon'}';
+
+  Future<void> _restore(String? uid) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key(uid));
+      if (raw == null || raw.isEmpty) return;
+      final saved = (jsonDecode(raw) as List)
+          .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
+          .toList();
+      // Only apply if this is still the same user and nothing was added in the
+      // meantime (avoid clobbering a just-added item during async load).
+      if (_uid == uid && state.isEmpty && saved.isNotEmpty) {
+        state = saved;
+      }
+    } catch (_) {
+      // Corrupt/incompatible saved cart — ignore.
+    }
+  }
+
+  Future<void> _persist() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _key(_uid), jsonEncode(state.map((c) => c.toJson()).toList()));
+    } catch (_) {}
+  }
 
   /// Adds [qty] of a variant, merging with an existing line if present.
   void addVariant({
@@ -37,6 +80,7 @@ class CartNotifier extends Notifier<List<CartItem>> {
         ),
       ];
     }
+    _persist();
   }
 
   void setQuantity(String variantId, int qty) {
@@ -48,12 +92,18 @@ class CartNotifier extends Notifier<List<CartItem>> {
       for (final c in state)
         if (c.variantId == variantId) c.copyWith(quantity: qty) else c,
     ];
+    _persist();
   }
 
-  void remove(String variantId) =>
-      state = state.where((c) => c.variantId != variantId).toList();
+  void remove(String variantId) {
+    state = state.where((c) => c.variantId != variantId).toList();
+    _persist();
+  }
 
-  void clear() => state = const [];
+  void clear() {
+    state = const [];
+    _persist();
+  }
 }
 
 /// The set of variant ids currently in the cart (for "already in cart" marks).

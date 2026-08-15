@@ -65,7 +65,12 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn()
         && request.resource.data.status in ['draft', 'pending'];
-      allow update: if isAdmin();
+      // Admin edits anything; a client may edit their OWN order only while it is
+      // still pending (e.g. deleting a line recomputes totals before approval).
+      allow update: if isAdmin()
+        || (isClient()
+            && resource.data.partyId == userData().partyId
+            && resource.data.status in ['draft', 'pending']);
       // Delete: admins always; a client may delete their OWN order only while it
       // has not yet been dispatched.
       allow delete: if isAdmin()

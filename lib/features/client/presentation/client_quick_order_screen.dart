@@ -295,7 +295,7 @@ class _ClientQuickOrderScreenState
     final theme = Theme.of(context);
     final product = widget.product;
     final variantsAsync = ref.watch(variantsByProductProvider(product.id));
-    final party = ref.watch(currentPartyProvider).valueOrNull;
+    final party = ref.watch(orderPartyProvider);
     final resolver =
         DiscountResolver(ref.watch(discountsProvider).valueOrNull ?? const []);
     final cartCount = ref.watch(cartItemCountProvider);

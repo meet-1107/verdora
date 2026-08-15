@@ -27,3 +27,14 @@ final currentPartyProvider = StreamProvider<Party?>((ref) {
       .map((doc) =>
           doc.exists ? Party.fromMap(doc.id, doc.data()!) : null);
 });
+
+/// Set when an admin is placing an order on behalf of a dealer. Null during
+/// normal client usage.
+final actingPartyProvider = StateProvider<Party?>((ref) => null);
+
+/// The party the ordering flow builds an order for: the admin's chosen dealer
+/// if set ([actingPartyProvider]), otherwise the signed-in client's own party.
+final orderPartyProvider = Provider<Party?>((ref) {
+  return ref.watch(actingPartyProvider) ??
+      ref.watch(currentPartyProvider).valueOrNull;
+});

@@ -10,6 +10,7 @@ import '../../../core/widgets/app_skeleton_loader.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../categories/domain/category.dart';
 import '../../categories/presentation/category_providers.dart';
+import '../../parties/presentation/party_providers.dart';
 import '../../products/presentation/product_providers.dart';
 import '../../subcategories/presentation/subcategory_providers.dart';
 import '../application/cart_provider.dart';
@@ -100,6 +101,7 @@ class _ClientCategoriesScreenState
       ),
       body: Column(
         children: [
+          const _AdminOrderBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg,
@@ -271,6 +273,48 @@ class _ClientCategoriesScreenState
                 });
                 Navigator.pop(context);
               },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A banner shown while an admin is placing an order on behalf of a dealer.
+/// Lets the admin see who the order is for and cancel out of the mode.
+class _AdminOrderBanner extends ConsumerWidget {
+  const _AdminOrderBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final party = ref.watch(actingPartyProvider);
+    if (party == null) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, 8, 8),
+        child: Row(
+          children: [
+            Icon(Icons.admin_panel_settings_outlined,
+                size: 18, color: scheme.onPrimaryContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('Creating order for ${party.name}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: scheme.onPrimaryContainer,
+                      fontWeight: FontWeight.w600)),
+            ),
+            TextButton(
+              onPressed: () {
+                ref.read(actingPartyProvider.notifier).state = null;
+                ref.read(cartProvider.notifier).clear();
+                Navigator.of(context).popUntil((r) => r.isFirst);
+              },
+              child: const Text('Cancel'),
             ),
           ],
         ),

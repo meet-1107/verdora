@@ -21,7 +21,7 @@ class QuickReorderSection extends ConsumerWidget {
     if (items.isEmpty) return const SizedBox.shrink();
 
     final discount =
-        ref.watch(currentPartyProvider).valueOrNull?.defaultDiscount ?? 0;
+        ref.watch(orderPartyProvider)?.defaultDiscount ?? 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

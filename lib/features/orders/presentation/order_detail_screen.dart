@@ -114,21 +114,21 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
   void _advance(Order o, OrderStatus next) {
     final repo = ref.read(orderRepositoryProvider);
     final logger = ref.read(activityLoggerProvider);
-    // Stock is deducted when the order is marked PACKED.
     if (next == OrderStatus.packed) {
       _act(() async {
         await repo.markPacked(o, createdBy: _uid);
         await logger.record('order.packed', target: _label(o));
         await _notifyStatus(o, OrderStatus.packed);
-      }, 'Marked packed — stock deducted, client notified.');
+      }, 'Marked packed — client notified.');
       return;
     }
+    // Stock is deducted when the order is DISPATCHED.
     if (next == OrderStatus.dispatched) {
       _act(() async {
         await repo.markDispatched(o, createdBy: _uid);
         await logger.record('order.dispatched', target: _label(o));
         await _notifyStatus(o, OrderStatus.dispatched);
-      }, 'Dispatched — client notified.');
+      }, 'Dispatched — stock deducted, client notified.');
       return;
     }
     _act(() async {
@@ -173,7 +173,10 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
 
   Future<void> _reject(Order o) async {
     final reason = await _promptReason(
-        title: 'Reject order', hint: 'Reason (shared with dealer)');
+        title: 'Reject order',
+        message: 'Are you sure you want to reject / cancel this order? '
+            'The dealer will be notified. This cannot be undone.',
+        hint: 'Reason (shared with dealer)');
     if (reason == null) return;
     if (reason.isEmpty) {
       if (mounted) {
@@ -320,27 +323,38 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
   }
 
   Future<String?> _promptReason(
-      {required String title, required String hint}) {
+      {required String title, required String hint, String? message}) {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 3,
-          decoration: InputDecoration(labelText: hint),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (message != null) ...[
+              Text(message,
+                  style: Theme.of(dialogContext).textTheme.bodyMedium),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            TextField(
+              controller: controller,
+              autofocus: true,
+              maxLines: 3,
+              decoration: InputDecoration(labelText: hint),
+            ),
+          ],
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel')),
+              child: const Text('No, keep it')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () =>
                 Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Confirm'),
+            child: const Text('Yes, reject'),
           ),
         ],
       ),
@@ -573,6 +587,22 @@ class _HeroCard extends StatelessWidget {
                         '${Formatters.date(order.createdAt)}',
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: scheme.onSurfaceVariant)),
+                    if (order.placedByAdmin)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.admin_panel_settings_outlined,
+                                size: 14, color: scheme.primary),
+                            const SizedBox(width: 4),
+                            Text('Placed by admin',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                    color: scheme.primary,
+                                    fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -1132,7 +1162,7 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
     required int boxSize,
     required int packSize,
   }) async {
-    final newQty = await showDialog<int>(
+    final res = await showDialog<int>(
       context: context,
       builder: (_) => _QtyPackDialog(
         label: it.variantLabel,
@@ -1142,7 +1172,14 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
         stock: stock,
       ),
     );
-    if (newQty == null || newQty == it.quantity) return;
+    if (res == null) return;
+    // Sentinel from the dialog's "Delete size" button.
+    if (res < 0) {
+      if (context.mounted) await _confirmDeleteLine(context, it);
+      return;
+    }
+    final newQty = res;
+    if (newQty == it.quantity) return;
     try {
       final repo = ref.read(orderRepositoryProvider);
       final uid = ref.read(currentUserProvider).valueOrNull?.uid;
@@ -1173,6 +1210,55 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
     }
   }
 
+  /// Admin: delete a whole line (variant) from the order, with confirmation.
+  /// Totals recompute automatically. Allowed until the order is dispatched.
+  Future<void> _confirmDeleteLine(BuildContext context, OrderItem it) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete product variant'),
+        content: Text(
+            'Are you sure you want to delete "${it.productName} · ${it.variantLabel}" '
+            'from this order? The total will be recalculated.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final repo = ref.read(orderRepositoryProvider);
+      final uid = ref.read(currentUserProvider).valueOrNull?.uid;
+      await repo.updateItemQuantity(order.id, it.id, 0, createdBy: uid);
+      if (order.status == OrderStatus.approved ||
+          order.status == OrderStatus.modifiedApproved) {
+        await repo.markModified(order.id);
+      }
+      await ref.read(notificationRepositoryProvider).notifyParty(
+            companyId: order.companyId,
+            partyId: order.partyId,
+            title: 'Order updated',
+            body: '🗑️ ${order.displayId}: ${it.productName} '
+                '(${it.variantLabel}) was removed. Please review.',
+          );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Variant removed — client notified.')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      }
+    }
+  }
 }
 
 /// A collapsible product group for the order's Products tab: tap the product
@@ -1718,6 +1804,12 @@ class _QtyPackDialogState extends State<_QtyPackDialog> {
         ),
       ),
       actions: [
+        // Delete the whole line (returns a negative sentinel to the caller).
+        TextButton(
+          onPressed: () => Navigator.pop(context, -1),
+          style: TextButton.styleFrom(foregroundColor: AppColors.error),
+          child: const Text('Delete size'),
+        ),
         TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel')),

@@ -21,14 +21,22 @@ const _revenueStatuses = {
   OrderStatus.completed,
 };
 
-class ReportsScreen extends ConsumerWidget {
+class ReportsScreen extends ConsumerStatefulWidget {
   const ReportsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ReportsScreen> createState() => _ReportsScreenState();
+}
+
+class _ReportsScreenState extends ConsumerState<ReportsScreen> {
+  DateTime? _month; // selected month; null until resolved from data
+
+  @override
+  Widget build(BuildContext context) {
     final ordersAsync = ref.watch(companyOrdersProvider);
     final variants = ref.watch(allVariantsProvider).valueOrNull ?? const [];
     final lowStock = ref.watch(lowStockVariantsProvider).length;
+    final items = ref.watch(companyOrderItemsProvider).valueOrNull ?? const [];
 
     final inventoryValue =
         variants.fold<double>(0, (s, v) => s + v.currentStock * v.rate);
@@ -41,7 +49,7 @@ class ReportsScreen extends ConsumerWidget {
           PopupMenuButton<String>(
             icon: const Icon(Icons.download),
             tooltip: 'Export orders',
-            onSelected: (fmt) => _export(context, ref, fmt),
+            onSelected: (fmt) => _export(context, fmt),
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'csv', child: Text('Export CSV')),
               PopupMenuItem(value: 'xlsx', child: Text('Export Excel')),
@@ -63,6 +71,46 @@ class ReportsScreen extends ConsumerWidget {
           final pending =
               orders.where((o) => o.status == OrderStatus.pending).length;
 
+          // ---- month selection ----
+          final monthFmt = DateFormat('MMMM yyyy');
+          final months = <DateTime>[];
+          final seen = <String>{};
+          for (final o in orders) {
+            final d = o.createdAt;
+            if (d == null) continue;
+            if (seen.add('${d.year}-${d.month}')) {
+              months.add(DateTime(d.year, d.month));
+            }
+          }
+          months.sort((a, b) => b.compareTo(a));
+          final month =
+              _month ?? (months.isNotEmpty ? months.first : DateTime(2000));
+          bool inMonth(DateTime? d) =>
+              d != null && d.year == month.year && d.month == month.month;
+
+          // ---- highest party revenue (month) ----
+          final partyTotals = <String, double>{};
+          for (final o in revenueOrders) {
+            if (!inMonth(o.createdAt)) continue;
+            partyTotals[o.partyName] =
+                (partyTotals[o.partyName] ?? 0) + o.grandTotal;
+          }
+          final topParty = partyTotals.entries.fold<MapEntry<String, double>?>(
+              null, (best, e) => best == null || e.value > best.value ? e : best);
+
+          // ---- hero product: most-purchased across all parties (month) ----
+          final orderById = {for (final o in orders) o.id: o};
+          final qtyByProduct = <String, int>{};
+          for (final it in items) {
+            final o = orderById[it.orderId];
+            if (o == null || !_revenueStatuses.contains(o.status)) continue;
+            if (!inMonth(o.createdAt)) continue;
+            qtyByProduct[it.productName] =
+                (qtyByProduct[it.productName] ?? 0) + it.quantity;
+          }
+          final heroProduct = qtyByProduct.entries.fold<MapEntry<String, int>?>(
+              null, (best, e) => best == null || e.value > best.value ? e : best);
+
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -82,6 +130,46 @@ class ReportsScreen extends ConsumerWidget {
                     Colors.red),
               ]),
               const SizedBox(height: 24),
+              if (months.isNotEmpty) ...[
+                Row(
+                  children: [
+                    Text('Month highlights',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const Spacer(),
+                    DropdownButton<DateTime>(
+                      value: month,
+                      underline: const SizedBox.shrink(),
+                      items: [
+                        for (final m in months)
+                          DropdownMenuItem(
+                              value: m, child: Text(monthFmt.format(m))),
+                      ],
+                      onChanged: (v) => setState(() => _month = v),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _HighlightCard(
+                  icon: Icons.emoji_events_outlined,
+                  color: Colors.amber.shade800,
+                  label: 'Highest party revenue',
+                  title: topParty?.key ?? '—',
+                  value: topParty == null
+                      ? 'No revenue this month'
+                      : Formatters.money(topParty.value),
+                ),
+                const SizedBox(height: 12),
+                _HighlightCard(
+                  icon: Icons.star_outline,
+                  color: Colors.deepPurple,
+                  label: 'Hero product (most purchased)',
+                  title: heroProduct?.key ?? '—',
+                  value: heroProduct == null
+                      ? 'No purchases this month'
+                      : '${Formatters.qty(heroProduct.value)} pcs across all parties',
+                ),
+                const SizedBox(height: 24),
+              ],
               _Section(
                 title: 'Orders by status',
                 child: _StatusBreakdown(orders: orders),
@@ -103,7 +191,7 @@ class ReportsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _export(BuildContext context, WidgetRef ref, String fmt) async {
+  Future<void> _export(BuildContext context, String fmt) async {
     final orders = ref.read(companyOrdersProvider).valueOrNull ?? const [];
     if (orders.isEmpty) {
       ScaffoldMessenger.of(context)
@@ -188,6 +276,64 @@ class _Metric extends StatelessWidget {
             const SizedBox(height: 8),
             Text(value, style: Theme.of(context).textTheme.titleLarge),
             Text(label, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HighlightCard extends StatelessWidget {
+  const _HighlightCard({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.title,
+    required this.value,
+  });
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 2),
+                  Text(title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold)),
+                  Text(value,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
           ],
         ),
       ),

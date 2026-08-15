@@ -300,7 +300,7 @@ class _VariantPickerSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final variants = ref.watch(variantsByProductProvider(product.id));
-    final party = ref.watch(currentPartyProvider).valueOrNull;
+    final party = ref.watch(orderPartyProvider);
     final resolver =
         DiscountResolver(ref.watch(discountsProvider).valueOrNull ?? const []);
 

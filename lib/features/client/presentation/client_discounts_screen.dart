@@ -13,7 +13,7 @@ class ClientDiscountsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final party = ref.watch(currentPartyProvider).valueOrNull;
+    final party = ref.watch(orderPartyProvider);
     return Scaffold(
       appBar: AppBar(
         title: Column(

@@ -11,6 +11,8 @@ import '../../../core/widgets/app_search_bar.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/presentation/auth_providers.dart';
+import '../../client/application/cart_provider.dart';
+import '../../client/presentation/client_categories_screen.dart';
 import '../../discounts/presentation/discount_structure_view.dart';
 import '../../import_engine/logic/party_import_config.dart';
 import '../../import_engine/logic/party_import_executor.dart';
@@ -133,6 +135,13 @@ class _PartiesScreenState extends ConsumerState<PartiesScreen> {
       BuildContext context, WidgetRef ref, String action, Party p) async {
     final repo = ref.read(partyRepositoryProvider);
     switch (action) {
+      case 'create_order':
+        // Admin builds an order on behalf of this dealer using the client
+        // catalog. A fresh cart is used, scoped to the selected party.
+        ref.read(actingPartyProvider.notifier).state = p;
+        ref.read(cartProvider.notifier).clear();
+        Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => const ClientCategoriesScreen()));
       case 'edit':
         _openForm(context, existing: p);
       case 'login':
@@ -328,6 +337,9 @@ class _PartyCard extends StatelessWidget {
               PopupMenuButton<String>(
                 onSelected: onAction,
                 itemBuilder: (_) => [
+                  const PopupMenuItem(
+                      value: 'create_order',
+                      child: Text('Create order')),
                   const PopupMenuItem(value: 'edit', child: Text('Edit')),
                   const PopupMenuItem(
                       value: 'login',

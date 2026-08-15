@@ -14,6 +14,7 @@ class AppProductReviewCard extends StatelessWidget {
     required this.total,
     this.imageUrl,
     this.discount,
+    this.onDelete,
   });
 
   final String name;
@@ -23,6 +24,10 @@ class AppProductReviewCard extends StatelessWidget {
   final String total;
   final String? imageUrl;
   final String? discount; // e.g. "5%"
+
+  /// When provided, a delete button appears (used for removing a line from a
+  /// still-pending order).
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -62,9 +67,23 @@ class AppProductReviewCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
-            Text(total,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(color: scheme.primary, fontWeight: FontWeight.bold)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(total,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                        color: scheme.primary, fontWeight: FontWeight.bold)),
+                if (onDelete != null)
+                  IconButton(
+                    tooltip: 'Delete',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: Icon(Icons.delete_outline, size: 20, color: scheme.error),
+                    onPressed: onDelete,
+                  ),
+              ],
+            ),
           ],
         ),
       ),

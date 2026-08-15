@@ -11,6 +11,7 @@ class CompanySettings {
     this.currency = '₹',
     this.supportNumber = '',
     this.terms = '',
+    this.logoUrl = '',
   });
 
   final String companyId;
@@ -24,6 +25,24 @@ class CompanySettings {
   final String supportNumber;
   final String terms;
 
+  /// Company logo (Storage download URL or inline data: URI). Shown on the
+  /// login screen and the client home header.
+  final String logoUrl;
+
+  CompanySettings copyWith({String? logoUrl}) => CompanySettings(
+        companyId: companyId,
+        name: name,
+        address: address,
+        phone: phone,
+        email: email,
+        gstNumber: gstNumber,
+        invoicePrefix: invoicePrefix,
+        currency: currency,
+        supportNumber: supportNumber,
+        terms: terms,
+        logoUrl: logoUrl ?? this.logoUrl,
+      );
+
   factory CompanySettings.fromMap(String companyId, Map<String, dynamic> map) {
     return CompanySettings(
       companyId: companyId,
@@ -36,6 +55,7 @@ class CompanySettings {
       currency: map['currency'] as String? ?? '₹',
       supportNumber: map['supportNumber'] as String? ?? '',
       terms: map['terms'] as String? ?? '',
+      logoUrl: map['logoUrl'] as String? ?? '',
     );
   }
 
@@ -50,5 +70,6 @@ class CompanySettings {
         'currency': currency,
         'supportNumber': supportNumber,
         'terms': terms,
+        'logoUrl': logoUrl,
       };
 }

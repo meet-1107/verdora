@@ -286,6 +286,11 @@ class _ClientOrderDetailScreenState
                     discount: it.discountPercent > 0
                         ? '${_pct(it.discountPercent)}%'
                         : null,
+                    // Client may remove a line only while the order is still
+                    // pending (before the admin approves it).
+                    onDelete: order.status == OrderStatus.pending
+                        ? () => _deleteLine(it, list.length)
+                        : null,
                   ),
                 ),
             ],
@@ -565,6 +570,43 @@ class _ClientOrderDetailScreenState
   void _snack(String m) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+
+  /// Deletes a line from a still-pending order (with confirmation) and lets the
+  /// order totals recompute automatically.
+  Future<void> _deleteLine(OrderItem it, int totalLines) async {
+    if (totalLines <= 1) {
+      _snack('This is the only product. Cancel the whole order instead.');
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete product variant'),
+        content: Text(
+            'Are you sure you want to delete "${it.productName} · ${it.variantLabel}" '
+            'from this order? The total will be recalculated.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref
+          .read(orderRepositoryProvider)
+          .updateItemQuantity(order.id, it.id, 0, markModified: false);
+      _snack('Product removed. Total updated.');
+    } catch (e) {
+      _snack('Could not remove: $e');
+    }
   }
 
   String? _stepDesc(int i, int active) {

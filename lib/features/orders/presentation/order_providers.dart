@@ -23,3 +23,10 @@ final orderItemsProvider =
     StreamProvider.family<List<OrderItem>, String>((ref, orderId) {
   return ref.watch(orderRepositoryProvider).watchItems(orderId);
 });
+
+/// All line items across the company (admin only — used for reports & backup).
+final companyOrderItemsProvider = StreamProvider<List<OrderItem>>((ref) {
+  final user = ref.watch(currentUserProvider).valueOrNull;
+  if (user == null) return Stream.value(const []);
+  return ref.watch(orderRepositoryProvider).watchAllItems(user.companyId);
+});

@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants/app_constants.dart';
 import '../features/auth/presentation/auth_providers.dart';
 import '../features/notifications/data/notification_repository.dart';
-import '../features/settings/presentation/settings_providers.dart';
+import '../features/settings/presentation/settings_providers.dart'
+    show companySettingsProvider, cacheBranding, themeModeProvider;
 import 'router.dart';
 import 'theme.dart';
 
@@ -49,6 +50,15 @@ class B2bApp extends ConsumerWidget {
       final user = next.valueOrNull;
       if (user != null) {
         ref.read(notificationRepositoryProvider).registerToken(user.uid);
+      }
+    });
+
+    // Cache company branding (logo + name) so the pre-auth login screen can
+    // show it on the next launch.
+    ref.listen(companySettingsProvider, (prev, next) {
+      final s = next.valueOrNull;
+      if (s != null && (s.logoUrl.isNotEmpty || s.name.isNotEmpty)) {
+        cacheBranding(s.logoUrl, s.name);
       }
     });
     return MaterialApp.router(

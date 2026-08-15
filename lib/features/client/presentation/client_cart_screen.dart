@@ -74,9 +74,9 @@ class _ClientCartScreenState extends ConsumerState<ClientCartScreen> {
     final cart = ref.read(cartProvider);
     if (cart.isEmpty) return;
     final user = ref.read(currentUserProvider).valueOrNull;
-    final party = ref.read(currentPartyProvider).valueOrNull;
-    if (user == null || user.partyId == null) {
-      _snack('Your account is not linked to a party. Contact the admin.');
+    final party = ref.read(orderPartyProvider);
+    if (user == null || party == null) {
+      _snack('No party selected for this order.');
       return;
     }
     setState(() => _savingDraft = true);
@@ -84,8 +84,8 @@ class _ClientCartScreenState extends ConsumerState<ClientCartScreen> {
       final order = Order(
         id: '',
         companyId: user.companyId,
-        partyId: user.partyId!,
-        partyName: party?.name ?? user.name,
+        partyId: party.id,
+        partyName: party.name,
         status: OrderStatus.draft,
         subtotal: ref.read(cartSubtotalProvider),
         discountTotal: ref.read(cartDiscountProvider),
@@ -110,7 +110,7 @@ class _ClientCartScreenState extends ConsumerState<ClientCartScreen> {
       await ref.read(orderRepositoryProvider).createOrder(
             order: order,
             items: items,
-            clientCode: party?.partyCode ?? user.partyId!,
+            clientCode: party.partyCode.isEmpty ? party.id : party.partyCode,
           );
       ref.read(cartProvider.notifier).clear();
       if (mounted) {
@@ -232,7 +232,7 @@ class _ClientCartScreenState extends ConsumerState<ClientCartScreen> {
     double grandTotal,
   }) _recompute() {
     final cart = ref.read(cartProvider);
-    final party = ref.read(currentPartyProvider).valueOrNull;
+    final party = ref.read(orderPartyProvider);
     final resolver =
         DiscountResolver(ref.read(discountsProvider).valueOrNull ?? const []);
     final variants =
@@ -278,7 +278,7 @@ class _ClientCartScreenState extends ConsumerState<ClientCartScreen> {
   Widget build(BuildContext context) {
     final cart = ref.watch(cartProvider);
     // Watch the discount inputs so totals refresh live.
-    ref.watch(currentPartyProvider);
+    ref.watch(orderPartyProvider);
     ref.watch(discountsProvider);
     ref.watch(allVariantsProvider);
     ref.watch(productsProvider);

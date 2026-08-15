@@ -3,9 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/validators.dart';
+import '../../../core/widgets/app_image.dart';
+import '../../settings/presentation/settings_providers.dart';
 import '../data/auth_repository.dart';
 
 enum _LoginMode { admin, client }
@@ -150,6 +151,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isAdmin = _mode == _LoginMode.admin;
+    final branding = ref.watch(brandingProvider).valueOrNull;
 
     return Scaffold(
       body: Stack(
@@ -172,7 +174,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         opacity: _logoFade,
                         child: ScaleTransition(
                           scale: _logoScale,
-                          child: const _BrandLogo(),
+                          child: _BrandLogo(logoUrl: branding?.logoUrl),
                         ),
                       ),
                       const SizedBox(height: AppSpacing.xxl),
@@ -180,14 +182,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         opacity: _cardFade,
                         child: Column(
                           children: [
-                            Text(
-                              AppConstants.appName,
-                              style: theme.textTheme.headlineLarge?.copyWith(
-                                color: scheme.primary,
-                                fontWeight: FontWeight.bold,
+                            // Company name (from settings) shown below the logo.
+                            if ((branding?.name ?? '').isNotEmpty) ...[
+                              Text(
+                                branding!.name,
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.headlineLarge?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
+                              const SizedBox(height: AppSpacing.sm),
+                            ],
                             Text(
                               'Business Ordering & Inventory',
                               style: theme.textTheme.bodyMedium?.copyWith(
@@ -217,8 +223,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       Text(
-                        'v0.1.0  ·  © 2026 ${AppConstants.appName}',
-                        style: theme.textTheme.bodySmall?.copyWith(
+                        'Developed by Verdora  ·  Contact: 6351007253',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.labelSmall?.copyWith(
                           color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
                         ),
                       ),
@@ -409,19 +416,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 }
 
-/// Rounded brand logo tile.
+/// Rounded brand logo tile — shows the company logo if one is set, else the
+/// default app icon.
 class _BrandLogo extends StatelessWidget {
-  const _BrandLogo();
+  const _BrandLogo({this.logoUrl});
+  final String? logoUrl;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final provider = appImageProvider(logoUrl);
+    final hasLogo = provider != null;
     return Container(
-      width: 80,
-      height: 80,
+      width: 104,
+      height: 104,
+      padding: hasLogo ? const EdgeInsets.all(10) : EdgeInsets.zero,
       decoration: BoxDecoration(
-        color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(22),
+        // White plate behind the logo so it reads on any theme; brand tint for
+        // the default icon.
+        color: hasLogo ? Colors.white : scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: scheme.primary.withValues(alpha: 0.16),
@@ -431,7 +445,9 @@ class _BrandLogo extends StatelessWidget {
         ],
       ),
       alignment: Alignment.center,
-      child: Icon(Icons.inventory_2_rounded, size: 40, color: scheme.primary),
+      child: hasLogo
+          ? Image(image: provider, fit: BoxFit.contain)
+          : Icon(Icons.inventory_2_rounded, size: 40, color: scheme.primary),
     );
   }
 }

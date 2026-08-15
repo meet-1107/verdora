@@ -15,6 +15,26 @@ final companySettingsProvider = StreamProvider<CompanySettings>((ref) {
   return ref.watch(settingsRepositoryProvider).watch(user.companyId);
 });
 
+/// Cached company branding (logo + name) for the pre-auth login screen, which
+/// cannot read the settings document. Refreshed after every signed-in session.
+class Branding {
+  const Branding(this.logoUrl, this.name);
+  final String logoUrl;
+  final String name;
+}
+
+final brandingProvider = FutureProvider<Branding>((ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  return Branding(
+      prefs.getString('brand_logo') ?? '', prefs.getString('brand_name') ?? '');
+});
+
+Future<void> cacheBranding(String logoUrl, String name) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('brand_logo', logoUrl);
+  await prefs.setString('brand_name', name);
+}
+
 /// App theme mode, persisted in SharedPreferences.
 final themeModeProvider =
     NotifierProvider<ThemeModeController, ThemeMode>(ThemeModeController.new);

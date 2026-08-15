@@ -27,6 +27,8 @@ class Order {
     this.approvedAt,
     this.approvedByName,
     this.stockDeducted = false,
+    this.placedByAdmin = false,
+    this.createdByUid,
   });
 
   final String id;
@@ -67,6 +69,11 @@ class Order {
   /// packing). Guards against deducting the same order twice.
   final bool stockDeducted;
 
+  /// True when an admin placed this order on behalf of the dealer (not the
+  /// dealer signing in). [createdByUid] is the admin's uid.
+  final bool placedByAdmin;
+  final String? createdByUid;
+
   /// The best human-facing identifier to show for this order.
   String get displayId => orderNo ?? invoiceNo ?? 'Order';
 
@@ -94,6 +101,8 @@ class Order {
       approvedAt: (map['approvedAt'] as Timestamp?)?.toDate(),
       approvedByName: map['approvedByName'] as String?,
       stockDeducted: map['stockDeducted'] as bool? ?? false,
+      placedByAdmin: map['placedByAdmin'] as bool? ?? false,
+      createdByUid: map['createdByUid'] as String?,
     );
   }
 
@@ -113,6 +122,8 @@ class Order {
         'itemCount': itemCount,
         'note': note,
         'modified': modified,
+        'placedByAdmin': placedByAdmin,
+        'createdByUid': createdByUid,
         'createdAt': FieldValue.serverTimestamp(),
       };
 }

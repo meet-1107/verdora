@@ -57,7 +57,7 @@ class _ClientCheckoutPreviewScreenState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cart = ref.watch(cartProvider);
-    final party = ref.watch(currentPartyProvider).valueOrNull;
+    final party = ref.watch(orderPartyProvider);
     final user = ref.watch(currentUserProvider).valueOrNull;
     // Watch discount inputs so the totals refresh live, then re-resolve.
     ref.watch(discountsProvider);
@@ -374,9 +374,11 @@ class _ClientCheckoutPreviewScreenState
 
     final cart = ref.read(cartProvider);
     final user = ref.read(currentUserProvider).valueOrNull;
-    final party = ref.read(currentPartyProvider).valueOrNull;
-    if (user == null || user.partyId == null) {
-      _snack('Your account is not linked to a party. Contact the admin.');
+    final party = ref.read(orderPartyProvider);
+    // True when an admin is placing this order on behalf of a dealer.
+    final onBehalf = ref.read(actingPartyProvider) != null;
+    if (user == null || party == null) {
+      _snack('No party selected for this order.');
       return;
     }
     setState(() => _submitting = true);
@@ -388,8 +390,8 @@ class _ClientCheckoutPreviewScreenState
       final order = Order(
         id: '',
         companyId: user.companyId,
-        partyId: user.partyId!,
-        partyName: party?.name ?? user.name,
+        partyId: party.id,
+        partyName: party.name,
         status: OrderStatus.pending,
         subtotal: t.subtotal,
         discountTotal: t.productDiscount + t.globalDiscount,
@@ -397,6 +399,8 @@ class _ClientCheckoutPreviewScreenState
         globalDiscountPercent: t.globalPercent,
         itemCount: cart.length,
         note: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+        placedByAdmin: onBehalf,
+        createdByUid: onBehalf ? user.uid : null,
       );
       final items = [
         for (final c in cart)
@@ -418,10 +422,18 @@ class _ClientCheckoutPreviewScreenState
       final result = await ref.read(orderRepositoryProvider).createOrder(
             order: order,
             items: items,
-            clientCode: party?.partyCode ?? user.partyId!,
+            clientCode: party.partyCode.isEmpty ? party.id : party.partyCode,
           );
       ref.read(cartProvider.notifier).clear();
-      if (mounted) {
+      if (!mounted) return;
+      if (onBehalf) {
+        // Admin flow: clear the acting party and return to the admin panel.
+        ref.read(actingPartyProvider.notifier).state = null;
+        Navigator.of(context).popUntil((r) => r.isFirst);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content:
+                Text('Order ${result.orderNo} created for ${party.name}.')));
+      } else {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -507,7 +519,7 @@ class _ClientCheckoutPreviewScreenState
     Map<String, double> specificByVariant,
   }) _recompute() {
     final cart = ref.read(cartProvider);
-    final party = ref.read(currentPartyProvider).valueOrNull;
+    final party = ref.read(orderPartyProvider);
     final resolver =
         DiscountResolver(ref.read(discountsProvider).valueOrNull ?? const []);
     final variants =
