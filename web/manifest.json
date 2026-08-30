@@ -1,11 +1,11 @@
 {
-    "name": "b2b_saas",
-    "short_name": "b2b_saas",
+    "name": "Asian Plast",
+    "short_name": "Asian Plast",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Asian Plast",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

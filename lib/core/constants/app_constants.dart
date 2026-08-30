@@ -2,7 +2,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const appName = 'Verdora';
+  static const appName = 'Asian Plast';
 
   /// Single-tenant default. Every record carries [companyId] so the app is
   /// multi-tenant ready; until a company-switching UI exists, this default
