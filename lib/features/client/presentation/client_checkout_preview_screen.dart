@@ -138,7 +138,8 @@ class _ClientCheckoutPreviewScreenState
                   transport: party?.transport,
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                _orderMetaCard(theme, cart.length, totalQty, total),
+                _orderMetaCard(
+                    theme, cart.length, totalQty, _estimatedWeightText(), total),
                 if (changes.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.lg),
                   _changesCard(theme, changes),
@@ -238,7 +239,8 @@ class _ClientCheckoutPreviewScreenState
   }
 
   // ---- order meta ----
-  Widget _orderMetaCard(ThemeData theme, int products, int qty, double total) {
+  Widget _orderMetaCard(ThemeData theme, int products, int qty,
+      String weightText, double total) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xl),
@@ -249,12 +251,35 @@ class _ClientCheckoutPreviewScreenState
             _metaRow(theme, 'Date', Formatters.date(DateTime.now())),
             _metaRow(theme, 'Products', '$products'),
             _metaRow(theme, 'Total quantity', Formatters.qty(qty)),
+            _metaRow(theme, 'Estimated weight', weightText),
             _metaRow(theme, 'Estimated amount', Formatters.money(total),
                 bold: true),
           ],
         ),
       ),
     );
+  }
+
+  /// Total shipment weight of the cart, resolved from each line's variant
+  /// (grams, shown in kg once it reaches 1000 g). '-' when no line has a weight.
+  String _estimatedWeightText() {
+    final cart = ref.read(cartProvider);
+    final variants =
+        ref.read(allVariantsProvider).valueOrNull ?? const <Variant>[];
+    final byId = {for (final v in variants) v.id: v};
+    double grams = 0;
+    for (final c in cart) {
+      final v = byId[c.variantId];
+      if (v == null) continue;
+      final w = double.tryParse(v.attributes['Weight'] ?? '') ?? 0;
+      final unit = (v.attributes['Weight Unit'] ?? '').trim().toLowerCase();
+      grams += (unit == 'kg' ? w * 1000 : w) * c.quantity;
+    }
+    if (grams <= 0) return '-';
+    String f(double x) => x == x.roundToDouble()
+        ? x.toStringAsFixed(0)
+        : x.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
+    return grams >= 1000 ? '${f(grams / 1000)} kg' : '${f(grams)} gm';
   }
 
   Widget _metaRow(ThemeData theme, String label, String value,
