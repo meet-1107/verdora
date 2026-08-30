@@ -1,0 +1,13 @@
+{
+  "name": "asianplast-firebase-migrate",
+  "version": "1.0.0",
+  "private": true,
+  "description": "One-off migration of Firestore documents and Storage files between two Firebase projects for the Asian Plast B2B ERP app.",
+  "main": "migrate.js",
+  "scripts": {
+    "migrate": "node migrate.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

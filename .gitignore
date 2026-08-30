@@ -30,3 +30,10 @@ lib/firebase_options.dart
 
 # Env
 *.env
+
+# Migration tool — keep dependencies and service-account keys out of the repo
+tools/migrate/node_modules/
+tools/**/*service-account*.json
+tools/**/serviceAccount*.json
+tools/**/*-sa.json
+tools/migrate/users.json
