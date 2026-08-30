@@ -2,6 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/collections.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../inventory/domain/inventory_transaction.dart';
@@ -212,23 +213,78 @@ class OrderRepository {
     await batch.commit();
   }
 
-  /// Whether an order may still be deleted — only before it is dispatched.
+  /// Whether a **client** may still delete an order — only before it is
+  /// dispatched. (Admins can go further; see [canAdminDelete].)
   static bool canDelete(OrderStatus status) =>
       status != OrderStatus.dispatched &&
       status != OrderStatus.delivered &&
       status != OrderStatus.completed &&
       status != OrderStatus.returned;
 
-  /// Deletes an order and all of its line items atomically. Callers must check
-  /// [canDelete] first (dispatched/delivered orders must not be removed).
-  Future<void> deleteOrder(String orderId) async {
+  /// Whether an **admin** may delete an order. Permitted up to and including
+  /// the final `dispatched` state (its stock is returned on delete); only the
+  /// retired terminal states stay protected so historical records are intact.
+  static bool canAdminDelete(OrderStatus status) =>
+      status != OrderStatus.delivered &&
+      status != OrderStatus.completed &&
+      status != OrderStatus.returned;
+
+  /// Deletes an order and all of its line items atomically. Callers must gate
+  /// on [canDelete] (client) or [canAdminDelete] (admin) first. If the order's
+  /// stock was already deducted (it had been
+  /// dispatched), every line's quantity is added back to inventory in the same
+  /// batch — one `order` inventory transaction per variant for the audit trail —
+  /// so deleting a dispatched order never leaves stock permanently short.
+  Future<void> deleteOrder(String orderId, {String? createdBy}) async {
+    final orderRef = _orders.doc(orderId);
+    final orderSnap = await orderRef.get();
+    final orderData = orderSnap.data() ?? const {};
+    final stockDeducted = orderData['stockDeducted'] as bool? ?? false;
+    final companyId = orderData['companyId'] as String? ?? 'default';
+    final invoiceNo = orderData['invoiceNo'] as String?;
+
     final itemsSnap =
         await _orderItems.where('orderId', isEqualTo: orderId).get();
     final batch = _db.batch();
+
+    // Return dispatched quantities to stock before the lines are removed.
+    if (stockDeducted) {
+      // Total pieces to restore per variant (a variant can span >1 line).
+      final qtyByVariant = <String, int>{};
+      for (final doc in itemsSnap.docs) {
+        final item = OrderItem.fromMap(doc.id, doc.data());
+        if (item.variantId.isEmpty || item.quantity <= 0) continue;
+        qtyByVariant.update(item.variantId, (v) => v + item.quantity,
+            ifAbsent: () => item.quantity);
+      }
+      for (final entry in qtyByVariant.entries) {
+        final ref = _db.collection(Collections.variants).doc(entry.key);
+        final snap = await ref.get();
+        final raw = (snap.data()?['currentStock'] as num?)?.toInt() ?? 0;
+        final current = raw < 0 ? 0 : raw; // treat any stray negative as 0
+        batch.update(ref, {'currentStock': current + entry.value});
+        batch.set(
+          _db.collection(Collections.inventoryTransactions).doc(),
+          {
+            'companyId': companyId,
+            'variantId': entry.key,
+            'type': InventoryTxnType.order.value,
+            'quantity': entry.value,
+            'refType': 'order',
+            'refId': orderId,
+            'note': 'Restored on order delete'
+                '${invoiceNo != null ? ' ($invoiceNo)' : ''}',
+            'createdBy': createdBy,
+            'createdAt': FieldValue.serverTimestamp(),
+          },
+        );
+      }
+    }
+
     for (final doc in itemsSnap.docs) {
       batch.delete(doc.reference);
     }
-    batch.delete(_orders.doc(orderId));
+    batch.delete(orderRef);
     await batch.commit();
   }
 
@@ -314,10 +370,15 @@ class OrderRepository {
       }
     }
     final globalDiscount = afterProduct * globalPct / 100;
-    final grandTotal = afterProduct - globalDiscount;
+    // Re-apply 18% GST on the net amount so the edited order's final amount
+    // stays tax-inclusive (matches how it was created).
+    final taxable = afterProduct - globalDiscount;
+    final tax = taxable * AppConstants.gstRate / 100;
+    final grandTotal = taxable + tax;
     batch.update(_orders.doc(orderId), {
       'subtotal': subtotal,
       'discountTotal': productDiscount + globalDiscount,
+      'taxTotal': tax,
       'grandTotal': grandTotal,
       'itemCount': count,
       if (markModified) 'modified': true,

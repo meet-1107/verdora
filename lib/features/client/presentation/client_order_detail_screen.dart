@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/formatters.dart';
@@ -326,6 +327,9 @@ class _ClientOrderDetailScreenState
             if (globalDiscount > 0.01)
               ('Cash discount (${_pct(order.globalDiscountPercent)}%)',
                   '- ${Formatters.money(globalDiscount)}'),
+            if (order.taxTotal > 0)
+              ('GST (${_pct(AppConstants.gstRate)}%)',
+                  '+ ${Formatters.money(order.taxTotal)}'),
           ],
           grandTotalLabel: 'Final amount',
           grandTotalValue: Formatters.money(order.grandTotal),

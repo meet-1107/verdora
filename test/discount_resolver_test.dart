@@ -47,7 +47,7 @@ void main() {
     });
 
     test('inactive discounts are skipped', () {
-      final r = DiscountResolver([
+      const r = DiscountResolver([
         Discount(
             id: 'x',
             companyId: 'c',

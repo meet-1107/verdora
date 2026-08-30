@@ -150,6 +150,6 @@ class PartyImportExecutor implements ImportExecutor {
   String _passwordFor(String? provided, String code) {
     if (provided != null && provided.length >= 6) return provided;
     final base = code.replaceAll(RegExp(r'\s'), '');
-    return base.length >= 6 ? base : '${base}@2026';
+    return base.length >= 6 ? base : '$base@2026';
   }
 }

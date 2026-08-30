@@ -178,7 +178,7 @@ class _SubcategoryFormState extends ConsumerState<_SubcategoryForm> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: _categoryId,
+                initialValue: _categoryId,
                 decoration: const InputDecoration(labelText: 'Category'),
                 items: [
                   for (final c in widget.categories)

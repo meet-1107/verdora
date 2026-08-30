@@ -274,7 +274,7 @@ class _MappingStep extends ConsumerWidget {
                 Expanded(
                   flex: 3,
                   child: DropdownButtonFormField<String?>(
-                    value: mapping[field.key],
+                    initialValue: mapping[field.key],
                     isExpanded: true,
                     decoration: const InputDecoration(isDense: true),
                     items: [
@@ -392,26 +392,28 @@ class _OptionsStep extends StatelessWidget {
       children: [
         Text('Duplicate handling',
             style: Theme.of(context).textTheme.titleSmall),
-        RadioListTile<ImportMode>(
-          value: ImportMode.addAndUpdate,
+        RadioGroup<ImportMode>(
           groupValue: mode,
           onChanged: (v) => onModeChanged(v!),
-          title: const Text('Add new and update existing'),
-          dense: true,
-        ),
-        RadioListTile<ImportMode>(
-          value: ImportMode.addOnly,
-          groupValue: mode,
-          onChanged: (v) => onModeChanged(v!),
-          title: const Text('Add new only (skip existing)'),
-          dense: true,
-        ),
-        RadioListTile<ImportMode>(
-          value: ImportMode.updateOnly,
-          groupValue: mode,
-          onChanged: (v) => onModeChanged(v!),
-          title: const Text('Update existing only'),
-          dense: true,
+          child: const Column(
+            children: [
+              RadioListTile<ImportMode>(
+                value: ImportMode.addAndUpdate,
+                title: Text('Add new and update existing'),
+                dense: true,
+              ),
+              RadioListTile<ImportMode>(
+                value: ImportMode.addOnly,
+                title: Text('Add new only (skip existing)'),
+                dense: true,
+              ),
+              RadioListTile<ImportMode>(
+                value: ImportMode.updateOnly,
+                title: Text('Update existing only'),
+                dense: true,
+              ),
+            ],
+          ),
         ),
         const Divider(height: 24),
         Wrap(spacing: 12, runSpacing: 8, children: [

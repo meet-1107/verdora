@@ -4,9 +4,15 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../../../core/constants/app_constants.dart';
 import '../../orders/domain/order.dart';
 import '../../products/domain/variant.dart';
 import '../../settings/domain/company_settings.dart';
+
+/// GST rate as a display string with no trailing zeros (e.g. "18").
+final String _gstPctStr = AppConstants.gstRate == AppConstants.gstRate.roundToDouble()
+    ? AppConstants.gstRate.toStringAsFixed(0)
+    : AppConstants.gstRate.toString();
 
 /// Builds a printable A4 invoice PDF for an order. [variants] supplies per-line
 /// weights (order items don't store weight) for the total-weight line.
@@ -276,7 +282,7 @@ pw.Widget _totals(
         row('Subtotal', order.subtotal),
         if (productDiscount > 0.01) row('Product discount', -productDiscount),
         if (cashDiscount > 0.01) row('Cash discount ($pctStr%)', -cashDiscount),
-        if (order.taxTotal > 0) row('Tax', order.taxTotal),
+        if (order.taxTotal > 0) row('GST ($_gstPctStr%)', order.taxTotal),
         pw.Divider(),
         row('Grand Total', order.grandTotal, bold: true),
       ]),

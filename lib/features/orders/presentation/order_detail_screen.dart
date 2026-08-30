@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/formatters.dart';
@@ -205,9 +206,12 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete order'),
-        content: const Text(
-            'Delete this order permanently? This cannot be undone. '
-            '(Only allowed before dispatch.)'),
+        content: Text(
+          o.stockDeducted
+              ? 'Delete this order permanently? This cannot be undone. '
+                  'The dispatched quantities will be returned to stock.'
+              : 'Delete this order permanently? This cannot be undone.',
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -223,7 +227,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
     if (ok != true) return;
     setState(() => _busy = true);
     try {
-      await ref.read(orderRepositoryProvider).deleteOrder(o.id);
+      await ref.read(orderRepositoryProvider).deleteOrder(o.id, createdBy: _uid);
       await ref
           .read(activityLoggerProvider)
           .record('order.deleted', target: _label(o));
@@ -410,7 +414,8 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
               icon: const Icon(Icons.picture_as_pdf_outlined),
               onPressed: () => _printInvoice(order),
             ),
-          if (isAdmin && (!locked || OrderRepository.canDelete(order.status)))
+          if (isAdmin &&
+              (!locked || OrderRepository.canAdminDelete(order.status)))
             Builder(builder: (context) {
               final canCancel = !locked &&
                   order.status != OrderStatus.cancelled &&
@@ -430,7 +435,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
                         value: 'cancel',
                         child: Text('Cancel order',
                             style: TextStyle(color: AppColors.error))),
-                  if (OrderRepository.canDelete(order.status))
+                  if (OrderRepository.canAdminDelete(order.status))
                     const PopupMenuItem(
                         value: 'delete', child: Text('Delete order')),
                 ],
@@ -882,7 +887,9 @@ class _SummaryCard extends StatelessWidget {
                 context,
                 'Cash discount (${_pct(order.globalDiscountPercent)}%)',
                 -cashDiscount),
-          if (order.taxTotal > 0) _amountRow(context, 'Tax', order.taxTotal),
+          if (order.taxTotal > 0)
+            _amountRow(context, 'GST (${_pct(AppConstants.gstRate)}%)',
+                order.taxTotal),
           const Divider(),
           _amountRow(context, 'Grand total', order.grandTotal, bold: true),
         ],

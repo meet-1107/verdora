@@ -361,6 +361,7 @@ class ClientProfileScreen extends ConsumerWidget {
       ),
     );
     if (ok == true) {
+      if (!context.mounted) return;
       // Capture the router before the async gap; the profile widget is torn
       // down by the auth redirect during sign-out. Re-asserting /login on the
       // next frame guarantees the login screen even if the reactive redirect is

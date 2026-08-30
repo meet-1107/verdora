@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/formatters.dart';
@@ -181,6 +182,8 @@ class _ClientCheckoutPreviewScreenState
                     if (t.globalDiscount > 0)
                       ('Cash discount (${_pct(t.globalPercent)}%)',
                           '- ${Formatters.money(t.globalDiscount)}'),
+                    ('GST (${_pct(AppConstants.gstRate)}%)',
+                        '+ ${Formatters.money(t.tax)}'),
                   ],
                   grandTotalLabel: 'Final amount',
                   grandTotalValue: Formatters.money(total),
@@ -395,6 +398,7 @@ class _ClientCheckoutPreviewScreenState
         status: OrderStatus.pending,
         subtotal: t.subtotal,
         discountTotal: t.productDiscount + t.globalDiscount,
+        taxTotal: t.tax,
         grandTotal: t.grandTotal,
         globalDiscountPercent: t.globalPercent,
         itemCount: cart.length,
@@ -449,6 +453,7 @@ class _ClientCheckoutPreviewScreenState
   }
 
   Future<void> _previewPdf(List<CartItem> cart, String partyName) async {
+    final t = _recompute();
     final doc = pw.Document();
     doc.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
@@ -479,9 +484,17 @@ class _ClientCheckoutPreviewScreenState
         pw.SizedBox(height: 12),
         pw.Align(
           alignment: pw.Alignment.centerRight,
-          child: pw.Text(
-            'Grand total: ${ref.read(cartTotalProvider).toStringAsFixed(2)}',
-            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Text('GST (${_pct(AppConstants.gstRate)}%): '
+                  '${t.tax.toStringAsFixed(2)}'),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                'Grand total: ${t.grandTotal.toStringAsFixed(2)}',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
+            ],
           ),
         ),
       ],
@@ -515,6 +528,8 @@ class _ClientCheckoutPreviewScreenState
     double productDiscount,
     double globalPercent,
     double globalDiscount,
+    double taxable,
+    double tax,
     double grandTotal,
     Map<String, double> specificByVariant,
   }) _recompute() {
@@ -553,12 +568,17 @@ class _ClientCheckoutPreviewScreenState
     }
     final globalPct = party?.defaultDiscount ?? 0;
     final globalDiscount = afterProduct * globalPct / 100;
+    // GST is charged on the net amount left after every discount.
+    final taxable = afterProduct - globalDiscount;
+    final tax = taxable * AppConstants.gstRate / 100;
     return (
       subtotal: subtotal,
       productDiscount: productDiscount,
       globalPercent: globalPct,
       globalDiscount: globalDiscount,
-      grandTotal: afterProduct - globalDiscount,
+      taxable: taxable,
+      tax: tax,
+      grandTotal: taxable + tax,
       specificByVariant: specificByVariant,
     );
   }

@@ -390,9 +390,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 FilledButton(
                   onPressed: _loading ? null : _submit,
                   child: _loading
-                      ? Row(
+                      ? const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
+                          children: [
                             SizedBox(
                               height: 20,
                               width: 20,

@@ -16,6 +16,10 @@ class AppConstants {
 
   static const invoicePrefix = 'INV';
 
+  /// GST rate (percent) applied to the net amount (after all discounts) on a
+  /// client purchase order and its generated invoice. Single tax slab for now.
+  static const double gstRate = 18.0;
+
   /// Web Push certificate (VAPID) public key for FCM on web. Used by
   /// `getToken(vapidKey: ...)`; ignored on Android/iOS.
   static const webPushVapidKey =

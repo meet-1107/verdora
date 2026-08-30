@@ -8,7 +8,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
-final exportServiceProvider = Provider<ExportService>((ref) => ExportService());
+final exportServiceProvider =
+    Provider<ExportService>((ref) => const ExportService());
 
 /// Exports a simple table ([headers] + string [rows]) to CSV, Excel or PDF and
 /// hands the file to the user (save dialog / download / share sheet).

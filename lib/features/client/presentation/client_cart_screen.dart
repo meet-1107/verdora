@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/app_bottom_order_bar.dart';
@@ -81,6 +82,9 @@ class _ClientCartScreenState extends ConsumerState<ClientCartScreen> {
     }
     setState(() => _savingDraft = true);
     try {
+      // Net amount after discounts, then 18% GST on top for the final amount.
+      final net = ref.read(cartTotalProvider);
+      final tax = net * AppConstants.gstRate / 100;
       final order = Order(
         id: '',
         companyId: user.companyId,
@@ -89,7 +93,8 @@ class _ClientCartScreenState extends ConsumerState<ClientCartScreen> {
         status: OrderStatus.draft,
         subtotal: ref.read(cartSubtotalProvider),
         discountTotal: ref.read(cartDiscountProvider),
-        grandTotal: ref.read(cartTotalProvider),
+        taxTotal: tax,
+        grandTotal: net + tax,
         itemCount: cart.length,
         note: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       );
@@ -229,6 +234,8 @@ class _ClientCartScreenState extends ConsumerState<ClientCartScreen> {
     double productDiscount,
     double globalPercent,
     double globalDiscount,
+    double taxable,
+    double tax,
     double grandTotal,
   }) _recompute() {
     final cart = ref.read(cartProvider);
@@ -264,12 +271,17 @@ class _ClientCartScreenState extends ConsumerState<ClientCartScreen> {
     }
     final globalPct = party?.defaultDiscount ?? 0;
     final globalDiscount = afterProduct * globalPct / 100;
+    // GST is charged on the net amount left after every discount.
+    final taxable = afterProduct - globalDiscount;
+    final tax = taxable * AppConstants.gstRate / 100;
     return (
       subtotal: subtotal,
       productDiscount: productDiscount,
       globalPercent: globalPct,
       globalDiscount: globalDiscount,
-      grandTotal: afterProduct - globalDiscount,
+      taxable: taxable,
+      tax: tax,
+      grandTotal: taxable + tax,
     );
   }
 
@@ -519,6 +531,7 @@ class _ClientCartScreenState extends ConsumerState<ClientCartScreen> {
           productDiscount: t.productDiscount,
           globalPercent: t.globalPercent,
           globalDiscount: t.globalDiscount,
+          tax: t.tax,
           finalAmount: t.grandTotal,
         ),
         const SizedBox(height: AppSpacing.xl),
@@ -595,6 +608,7 @@ class _TotalsCard extends StatelessWidget {
     required this.productDiscount,
     required this.globalPercent,
     required this.globalDiscount,
+    required this.tax,
     required this.finalAmount,
   });
   final int totalQty;
@@ -603,6 +617,7 @@ class _TotalsCard extends StatelessWidget {
   final double productDiscount;
   final double globalPercent;
   final double globalDiscount;
+  final double tax;
   final double finalAmount;
 
   static const _green = Color(0xFF16A34A);
@@ -651,6 +666,8 @@ class _TotalsCard extends StatelessWidget {
             line('Cash discount (${_pct(globalPercent)}%)',
                 '− ${Formatters.money(globalDiscount)}',
                 color: _green),
+          line('GST (${_pct(AppConstants.gstRate)}%)',
+              '+ ${Formatters.money(tax)}'),
           const SizedBox(height: AppSpacing.sm),
           Container(
             padding: const EdgeInsets.symmetric(

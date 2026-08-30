@@ -155,7 +155,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: catValue,
+                    initialValue: catValue,
                     decoration: const InputDecoration(labelText: 'Category'),
                     items: [
                       for (final c in cats)
@@ -168,7 +168,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: subValue,
+                    initialValue: subValue,
                     decoration: const InputDecoration(
                         labelText: 'Subcategory (optional)'),
                     items: [
@@ -903,7 +903,7 @@ class _VariantFormState extends ConsumerState<_VariantFormDialog> {
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _sizeUnit,
+                      initialValue: _sizeUnit,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Size unit'),
                       items: _optionItems(_sizeUnitOptions, _sizeUnit),
@@ -924,7 +924,7 @@ class _VariantFormState extends ConsumerState<_VariantFormDialog> {
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _lengthUnit,
+                      initialValue: _lengthUnit,
                       isExpanded: true,
                       decoration:
                           const InputDecoration(labelText: 'Length unit'),
@@ -946,7 +946,7 @@ class _VariantFormState extends ConsumerState<_VariantFormDialog> {
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _weightUnit,
+                      initialValue: _weightUnit,
                       isExpanded: true,
                       decoration:
                           const InputDecoration(labelText: 'Weight unit'),

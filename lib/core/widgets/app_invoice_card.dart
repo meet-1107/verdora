@@ -32,7 +32,7 @@ class AppInvoiceCard extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.xl),
           child: Row(
             children: [
-              Icon(Icons.hourglass_empty, color: AppColors.warning),
+              const Icon(Icons.hourglass_empty, color: AppColors.warning),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
