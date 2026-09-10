@@ -37,3 +37,8 @@ tools/**/*service-account*.json
 tools/**/serviceAccount*.json
 tools/**/*-sa.json
 tools/migrate/users.json
+
+# Android release signing (secrets — never commit)
+android/key.properties
+**/*.jks
+**/*.keystore
