@@ -204,7 +204,7 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
           ),
         );
     return SizedBox(
-      height: 118,
+      height: 140,
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [

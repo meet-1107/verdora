@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/constants/app_constants.dart';
+import '../core/widgets/animated_splash.dart';
 import '../features/auth/presentation/auth_providers.dart';
 import '../features/notifications/data/notification_repository.dart';
 import '../features/settings/presentation/settings_providers.dart'
@@ -73,6 +74,9 @@ class B2bApp extends ConsumerWidget {
       routeInformationParser: router.routeInformationParser,
       routeInformationProvider: router.routeInformationProvider,
       backButtonDispatcher: _backButtonDispatcher,
+      // Branded animated splash on top of everything during cold-start load.
+      builder: (context, child) =>
+          SplashGate(child: child ?? const SizedBox.shrink()),
     );
   }
 }

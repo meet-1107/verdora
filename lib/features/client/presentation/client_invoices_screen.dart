@@ -185,7 +185,7 @@ class _ClientInvoicesScreenState extends ConsumerState<ClientInvoicesScreen> {
   Widget _summary(List<Order> orders, int generated, double monthAmount) {
     final pending = orders.where(_isPending).length;
     return SizedBox(
-      height: 118,
+      height: 140,
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
