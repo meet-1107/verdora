@@ -225,7 +225,7 @@ class _SummaryRow extends StatelessWidget {
         .fold<double>(0, (sum, o) => sum + o.grandTotal);
 
     return SizedBox(
-      height: 140,
+      height: 156,
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [

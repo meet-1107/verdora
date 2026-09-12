@@ -5,7 +5,7 @@ import '../constants/app_constants.dart';
 import '../../features/settings/presentation/settings_providers.dart';
 import 'app_image.dart';
 
-/// Shows an animated branded splash on top of [child] for a short time on cold
+/// Shows a simple branded splash on top of [child] for a short time on cold
 /// start, then fades away — so the launch/loading wait isn't a blank screen.
 class SplashGate extends StatefulWidget {
   const SplashGate({super.key, required this.child});
@@ -22,11 +22,10 @@ class _SplashGateState extends State<SplashGate> {
   @override
   void initState() {
     super.initState();
-    // Keep the splash up briefly, then fade it out.
-    Future.delayed(const Duration(milliseconds: 2400), () {
+    Future.delayed(const Duration(milliseconds: 2200), () {
       if (mounted) setState(() => _fade = true);
     });
-    Future.delayed(const Duration(milliseconds: 2900), () {
+    Future.delayed(const Duration(milliseconds: 2700), () {
       if (mounted) setState(() => _show = false);
     });
   }
@@ -39,7 +38,7 @@ class _SplashGateState extends State<SplashGate> {
         if (_show)
           AnimatedOpacity(
             opacity: _fade ? 0 : 1,
-            duration: const Duration(milliseconds: 500),
+            duration: const Duration(milliseconds: 450),
             child: const _AnimatedSplash(),
           ),
       ],
@@ -55,177 +54,108 @@ class _AnimatedSplash extends ConsumerStatefulWidget {
 }
 
 class _AnimatedSplashState extends ConsumerState<_AnimatedSplash>
-    with TickerProviderStateMixin {
-  late final AnimationController _intro; // one-shot entrance
-  late final AnimationController _pulse; // looping logo pulse
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _intro;
 
   @override
   void initState() {
     super.initState();
     _intro = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 900))
+        vsync: this, duration: const Duration(milliseconds: 700))
       ..forward();
-    _pulse = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1400))
-      ..repeat(reverse: true);
   }
 
   @override
   void dispose() {
     _intro.dispose();
-    _pulse.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final branding = ref.watch(brandingProvider).valueOrNull;
     final logo = appImageProvider(branding?.logoUrl);
     final name = (branding?.name.isNotEmpty ?? false)
         ? branding!.name
         : AppConstants.appName;
-
-    const c1 = Color(0xFF1565C0);
-    const c2 = Color(0xFF0D47A1);
+    const accent = Color(0xFF1565C0);
 
     final fade = CurvedAnimation(parent: _intro, curve: Curves.easeOut);
-    final slide = Tween<Offset>(
-      begin: const Offset(0, 0.25),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _intro, curve: Curves.easeOutCubic));
+    final scale = Tween<double>(begin: 0.85, end: 1).animate(
+        CurvedAnimation(parent: _intro, curve: Curves.easeOutBack));
 
     return Directionality(
       textDirection: TextDirection.ltr,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [c1, c2],
-          ),
-        ),
-        child: Stack(
-          children: [
-            // Soft decorative circles.
-            Positioned(
-              top: -60,
-              right: -40,
-              child: _blob(160, Colors.white.withValues(alpha: 0.08)),
-            ),
-            Positioned(
-              bottom: -50,
-              left: -30,
-              child: _blob(130, Colors.white.withValues(alpha: 0.06)),
-            ),
-            Center(
+      child: ColoredBox(
+        color: theme.scaffoldBackgroundColor,
+        child: Center(
+          child: FadeTransition(
+            opacity: fade,
+            child: ScaleTransition(
+              scale: scale,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Pulsing logo badge.
-                  ScaleTransition(
-                    scale: Tween<double>(begin: 0.6, end: 1).animate(
-                        CurvedAnimation(
-                            parent: _intro, curve: Curves.easeOutBack)),
-                    child: FadeTransition(
-                      opacity: fade,
-                      child: AnimatedBuilder(
-                        animation: _pulse,
-                        builder: (_, child) {
-                          final s = 1 + (_pulse.value * 0.06);
-                          return Transform.scale(scale: s, child: child);
-                        },
-                        child: Container(
-                          width: 116,
-                          height: 116,
+                  SizedBox(
+                    width: 140,
+                    height: 140,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Animated ring around the logo.
+                        const SizedBox(
+                          width: 140,
+                          height: 140,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(accent),
+                          ),
+                        ),
+                        // Round logo badge with a border.
+                        Container(
+                          width: 104,
+                          height: 104,
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(28),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.20),
-                                blurRadius: 24,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
+                            color: theme.colorScheme.surface,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: accent, width: 2.5),
                             image: logo == null
                                 ? null
                                 : DecorationImage(
-                                    image: logo, fit: BoxFit.contain),
+                                    image: logo, fit: BoxFit.cover),
                           ),
                           alignment: Alignment.center,
                           child: logo == null
                               ? Text(
-                                  name.isNotEmpty ? name[0].toUpperCase() : 'V',
+                                  name.isNotEmpty
+                                      ? name[0].toUpperCase()
+                                      : 'V',
                                   style: const TextStyle(
-                                      fontSize: 52,
+                                      fontSize: 44,
                                       fontWeight: FontWeight.w800,
-                                      color: c2),
+                                      color: accent),
                                 )
                               : null,
                         ),
-                      ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 28),
-                  SlideTransition(
-                    position: slide,
-                    child: FadeTransition(
-                      opacity: fade,
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  FadeTransition(
-                    opacity: fade,
-                    child: Text(
-                      'Inventory & Orders',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withValues(alpha: 0.85),
-                        letterSpacing: 1.5,
-                      ),
+                  const SizedBox(height: 20),
+                  Text(
+                    name,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
                     ),
                   ),
                 ],
               ),
             ),
-            // Loading indicator near the bottom.
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 56,
-              child: Center(
-                child: FadeTransition(
-                  opacity: fade,
-                  child: SizedBox(
-                    width: 26,
-                    height: 26,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.4,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.white.withValues(alpha: 0.9)),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
-
-  Widget _blob(double size, Color color) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      );
 }
