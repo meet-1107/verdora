@@ -27,7 +27,7 @@ android {
 
     defaultConfig {
         // Matches the registered Firebase Android app (google-services.json).
-        applicationId = "com.company.nexgrova"
+        applicationId = "com.company.verdora"
         // firebase_auth requires a minimum SDK of 23.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
