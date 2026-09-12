@@ -21,4 +21,6 @@ class Collections {
   static const invoiceCounter = 'invoice_counter';
   static const orderCounters = 'order_counters';
   static const importTemplates = 'import_templates';
+  static const rawMaterials = 'raw_materials';
+  static const rawMaterialTransactions = 'raw_material_transactions';
 }

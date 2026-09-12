@@ -26,6 +26,7 @@ class AdminBranch {
   static const reports = 7;
   static const settings = 8;
   static const warehouse = 9;
+  static const rawMaterial = 10;
 }
 
 /// A single admin navigation item.
@@ -58,6 +59,8 @@ const _navGroups = <_NavGroup>[
         AdminBranch.parties),
     _NavItem('Inventory', Icons.inventory_2_outlined, Icons.inventory_2,
         AdminBranch.inventory),
+    _NavItem('Raw Material', Icons.science_outlined, Icons.science,
+        AdminBranch.rawMaterial),
   ]),
   _NavGroup('Catalog', [
     _NavItem('Products', Icons.category_outlined, Icons.category,

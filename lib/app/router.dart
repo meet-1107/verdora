@@ -20,6 +20,7 @@ import '../features/notifications/presentation/notifications_screen.dart';
 import '../features/orders/presentation/admin_orders_screen.dart';
 import '../features/parties/presentation/parties_screen.dart';
 import '../features/products/presentation/products_screen.dart';
+import '../features/raw_materials/presentation/raw_materials_screen.dart';
 import '../features/reports/presentation/reports_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/warehouse/presentation/warehouse_screen.dart';

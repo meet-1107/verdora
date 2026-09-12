@@ -98,6 +98,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ---- raw materials (admin only) ------------------------------------
+    match /raw_materials/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+    match /raw_material_transactions/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
     // ---- notifications -------------------------------------------------
     match /notifications/{id} {
       allow read: if isSignedIn();

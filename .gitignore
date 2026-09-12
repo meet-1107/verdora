@@ -42,3 +42,6 @@ tools/migrate/users.json
 android/key.properties
 **/*.jks
 **/*.keystore
+
+# Kotlin build logs
+android/.kotlin/

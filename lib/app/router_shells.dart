@@ -52,6 +52,7 @@ StatefulShellRoute _adminShellRoute() {
       _branch('/admin/reports', const ReportsScreen()),
       _branch('/admin/settings', const SettingsScreen()),
       _branch('/admin/warehouse', const WarehouseScreen()),
+      _branch('/admin/raw-materials', const RawMaterialsScreen()),
     ],
   );
 }
