@@ -10,6 +10,7 @@ import '../../../core/widgets/key_value_editor.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../categories/presentation/category_providers.dart';
+import '../../inventory/presentation/inventory_screen.dart';
 import '../../subcategories/presentation/subcategory_providers.dart';
 import '../data/product_repository.dart';
 import '../data/variant_repository.dart';
@@ -325,7 +326,7 @@ class _VariantsSectionState extends ConsumerState<_VariantsSection> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _UpdateStockSheet(variant: v),
+      builder: (_) => EditStockSheet(variant: v),
     );
   }
 
@@ -597,105 +598,6 @@ class _StockBar extends StatelessWidget {
             child: Text(label,
                 style: TextStyle(
                     color: fg, fontWeight: FontWeight.w700, fontSize: 12)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Compact bottom sheet to set a size's stock on hand (records an adjustment).
-class _UpdateStockSheet extends ConsumerStatefulWidget {
-  const _UpdateStockSheet({required this.variant});
-  final Variant variant;
-
-  @override
-  ConsumerState<_UpdateStockSheet> createState() => _UpdateStockSheetState();
-}
-
-class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
-  late final TextEditingController _stock =
-      TextEditingController(text: '${widget.variant.currentStock}');
-  bool _saving = false;
-
-  @override
-  void dispose() {
-    _stock.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    final newStock = int.tryParse(_stock.text.trim());
-    if (newStock == null) return;
-    setState(() => _saving = true);
-    try {
-      await ref.read(variantRepositoryProvider).updateWithStock(
-            widget.variant,
-            previousStock: widget.variant.currentStock,
-            newStock: newStock,
-          );
-      if (mounted) Navigator.pop(context);
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 14),
-              decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          Text('Update stock · ${_variantTitle(widget.variant)}',
-              style:
-                  const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text('Current: ${Formatters.qty(widget.variant.currentStock)}',
-              style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _stock,
-            keyboardType: TextInputType.number,
-            autofocus: true,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              labelText: 'New total stock',
-              helperText: 'Records a stock adjustment for the difference',
-            ),
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: _kVPrimary,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: _saving ? null : _save,
-              child: _saving
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Text('Save'),
-            ),
           ),
         ],
       ),

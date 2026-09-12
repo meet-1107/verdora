@@ -306,7 +306,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _EditStockSheet(variant: v),
+      builder: (_) => EditStockSheet(variant: v),
     );
   }
 }
@@ -511,7 +511,7 @@ class _ProductsInventoryScreenState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _EditStockSheet(variant: v),
+      builder: (_) => EditStockSheet(variant: v),
     );
   }
 }
@@ -959,15 +959,15 @@ class _Chevron extends StatelessWidget {
 
 // ---- edit-stock bottom sheet (4 types; Adjustment sets the total) ----------
 
-class _EditStockSheet extends ConsumerStatefulWidget {
-  const _EditStockSheet({required this.variant});
+class EditStockSheet extends ConsumerStatefulWidget {
+  const EditStockSheet({super.key, required this.variant});
   final Variant variant;
 
   @override
-  ConsumerState<_EditStockSheet> createState() => _EditStockSheetState();
+  ConsumerState<EditStockSheet> createState() => EditStockSheetState();
 }
 
-class _EditStockSheetState extends ConsumerState<_EditStockSheet> {
+class EditStockSheetState extends ConsumerState<EditStockSheet> {
   final _qty = TextEditingController();
   final _note = TextEditingController();
   InventoryTxnType _type = InventoryTxnType.purchase;
