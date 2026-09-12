@@ -15,6 +15,7 @@ import '../../notifications/presentation/notifications_screen.dart';
 import '../../orders/domain/order.dart';
 import '../../orders/domain/order_status.dart';
 import '../../orders/presentation/order_providers.dart';
+import '../../invoices/presentation/admin_invoices_screen.dart';
 import '../../raw_materials/presentation/raw_material_providers.dart';
 
 /// Admin command center: what needs doing now (work queue) first, then today's
@@ -115,6 +116,7 @@ class _DashboardBody extends ConsumerWidget {
     final packing =
         _count(OrderStatus.approved) + _count(OrderStatus.packing);
     final readyToDispatch = _count(OrderStatus.packed);
+    final invoices = orders.where((o) => o.invoiceNo != null).length;
 
     // Today's business.
     final todays = orders.where((o) => _isToday(o.createdAt)).toList();
@@ -166,6 +168,15 @@ class _DashboardBody extends ConsumerWidget {
               color: AppStatusPalette.dispatched,
               actionLabel: 'Open',
               onTap: () => context.go('/admin/orders'),
+            ),
+            _ActionCardData(
+              label: 'Invoices',
+              count: invoices,
+              icon: Icons.receipt_long_outlined,
+              color: AppColors.info,
+              actionLabel: 'Open',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const AdminInvoicesScreen())),
             ),
             _ActionCardData(
               label: 'Product low stock',
@@ -258,20 +269,17 @@ class _ActionGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
-      final cols = constraints.maxWidth > 1000
-          ? 4
-          : constraints.maxWidth > 640
-              ? 2
-              : 1;
+      // Always at least two columns (phone shows a 2-column grid).
+      final cols = constraints.maxWidth > 1000 ? 4 : 2;
       return GridView.count(
         crossAxisCount: cols,
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         mainAxisSpacing: AppSpacing.lg,
         crossAxisSpacing: AppSpacing.lg,
-        // A little more height (esp. single column) so the icon row, label and
-        // action button never overflow — including at larger text scales.
-        childAspectRatio: cols == 1 ? 2.4 : 1.3,
+        // Taller cells so the icon row, label and action button never overflow,
+        // including at larger text scales.
+        childAspectRatio: 1.25,
         children: [for (final c in cards) _ActionCard(data: c)],
       );
     });
@@ -387,7 +395,8 @@ class _StatGrid extends StatelessWidget {
         physics: const NeverScrollableScrollPhysics(),
         mainAxisSpacing: AppSpacing.lg,
         crossAxisSpacing: AppSpacing.lg,
-        childAspectRatio: 1.7,
+        // Slightly taller cells so labels never overflow at larger text scales.
+        childAspectRatio: 1.45,
         children: [for (final s in stats) _StatCard(data: s)],
       );
     });
