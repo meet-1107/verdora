@@ -27,6 +27,12 @@ final variantsOfProvider =
     ..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
 });
 
+/// A material is "simple" (no explicit sizes) when it has exactly one variant
+/// with a blank label — its stock lives on that single default variant. A
+/// material with named sizes ("1/2", "3/4") is variant-based instead.
+bool isSimpleVariantList(List<RawMaterialVariant> vs) =>
+    vs.length == 1 && vs.first.label.trim().isEmpty;
+
 /// Stock movements for a single variant.
 final rawVariantTxnsProvider =
     StreamProvider.family<List<RawMaterialTxn>, String>((ref, variantId) {

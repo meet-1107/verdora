@@ -7,9 +7,11 @@ import '../../auth/presentation/auth_providers.dart';
 import '../data/raw_material_repository.dart';
 import '../domain/raw_material.dart';
 import '../domain/raw_material_variant.dart';
+import 'raw_material_providers.dart';
 
 /// Add / edit a single variant of a raw material (e.g. Nut Bolt → "1/2 inch").
-/// Each variant has its own unit and stock.
+/// The unit is inherited from the material, so only the size label, its stock
+/// and optional attributes are set here.
 class RawMaterialVariantFormScreen extends ConsumerStatefulWidget {
   const RawMaterialVariantFormScreen({
     super.key,
@@ -31,9 +33,6 @@ class _RawMaterialVariantFormScreenState
   late final TextEditingController _label;
   late final TextEditingController _opening;
   late final TextEditingController _minStock;
-
-  late String _unitType;
-  late String _unit;
   final List<_Attr> _attrs = [];
   bool _saving = false;
 
@@ -47,9 +46,6 @@ class _RawMaterialVariantFormScreenState
     _opening = TextEditingController();
     _minStock =
         TextEditingController(text: e == null ? '' : fmtQty(e.minStock));
-    _unitType = e?.unitType ?? rawMaterialUnitTypes.keys.first;
-    final units = rawMaterialUnitTypes[_unitType]!;
-    _unit = (e != null && units.contains(e.unit)) ? e.unit : units.first;
     if (e != null) {
       for (final entry in e.attributes.entries) {
         _attrs.add(_Attr(entry.key, entry.value));
@@ -68,10 +64,13 @@ class _RawMaterialVariantFormScreenState
     super.dispose();
   }
 
-  Future<void> _save() async {
+  Future<void> _save(RawMaterial? material) async {
     if (!_formKey.currentState!.validate()) return;
     final user = ref.read(currentUserProvider).valueOrNull;
     if (user == null) return;
+    // Inherit the unit from the parent material.
+    final unitType = material?.unitType ?? widget.existing?.unitType ?? 'Pieces';
+    final unit = material?.unit ?? widget.existing?.unit ?? 'pcs';
     setState(() => _saving = true);
     try {
       final repo = ref.read(rawMaterialRepositoryProvider);
@@ -90,8 +89,8 @@ class _RawMaterialVariantFormScreenState
           rawMaterialId: e.rawMaterialId,
           label: _label.text.trim(),
           attributes: attrs,
-          unitType: _unitType,
-          unit: _unit,
+          unitType: unitType,
+          unit: unit,
           currentStock: e.currentStock,
           minStock: double.tryParse(_minStock.text.trim()) ?? 0,
           status: e.status,
@@ -104,8 +103,8 @@ class _RawMaterialVariantFormScreenState
             rawMaterialId: widget.rawMaterialId,
             label: _label.text.trim(),
             attributes: attrs,
-            unitType: _unitType,
-            unit: _unit,
+            unitType: unitType,
+            unit: unit,
             currentStock: double.tryParse(_opening.text.trim()) ?? 0,
             minStock: double.tryParse(_minStock.text.trim()) ?? 0,
           ),
@@ -129,7 +128,11 @@ class _RawMaterialVariantFormScreenState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final units = rawMaterialUnitTypes[_unitType]!;
+    final materials = ref.watch(rawMaterialsProvider).valueOrNull ?? const [];
+    final material =
+        materials.where((m) => m.id == widget.rawMaterialId).firstOrNull;
+    final unit = material?.unit ?? widget.existing?.unit ?? 'pcs';
+
     return Scaffold(
       appBar: AppBar(title: Text(_isEdit ? 'Edit variant' : 'Add variant')),
       body: Form(
@@ -140,52 +143,15 @@ class _RawMaterialVariantFormScreenState
             TextFormField(
               controller: _label,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Variant / size',
                 hintText: 'e.g. 1/2 inch',
+                helperText: 'Measured in ${material?.unit ?? unit}'
+                    ' (from the material)',
               ),
               validator: (v) => (v == null || v.trim().isEmpty)
                   ? 'Enter a variant name / size'
                   : null,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-
-            // Unit type → unit (dependent).
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _unitType,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Unit type'),
-                    items: rawMaterialUnitTypes.keys
-                        .map((t) =>
-                            DropdownMenuItem(value: t, child: Text(t)))
-                        .toList(),
-                    onChanged: (t) {
-                      if (t == null) return;
-                      setState(() {
-                        _unitType = t;
-                        _unit = rawMaterialUnitTypes[t]!.first;
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _unit,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Unit'),
-                    items: units
-                        .map((u) =>
-                            DropdownMenuItem(value: u, child: Text(u)))
-                        .toList(),
-                    onChanged: (u) =>
-                        setState(() => _unit = u ?? units.first),
-                  ),
-                ),
-              ],
             ),
             const SizedBox(height: AppSpacing.lg),
 
@@ -199,7 +165,7 @@ class _RawMaterialVariantFormScreenState
                 ],
                 decoration: InputDecoration(
                   labelText: 'Opening stock (optional)',
-                  suffixText: _unit,
+                  suffixText: unit,
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -214,7 +180,7 @@ class _RawMaterialVariantFormScreenState
               ],
               decoration: InputDecoration(
                 labelText: 'Low-stock alert at (optional)',
-                suffixText: _unit,
+                suffixText: unit,
                 helperText: 'Flagged "Low" when stock falls to this level.',
               ),
             ),
@@ -274,7 +240,7 @@ class _RawMaterialVariantFormScreenState
 
             const SizedBox(height: AppSpacing.xl),
             FilledButton.icon(
-              onPressed: _saving ? null : _save,
+              onPressed: _saving ? null : () => _save(material),
               icon: _saving
                   ? const SizedBox(
                       height: 18,

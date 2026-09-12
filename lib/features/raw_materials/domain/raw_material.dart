@@ -25,6 +25,8 @@ class RawMaterial {
     required this.name,
     this.imageUrl = '',
     this.note,
+    this.unitType = 'Pieces',
+    this.unit = 'pcs',
     this.status = 'active',
     this.createdAt,
   });
@@ -34,6 +36,11 @@ class RawMaterial {
   final String name;
   final String imageUrl;
   final String? note;
+
+  /// The material's unit of measure. Its variants inherit this — the unit is a
+  /// material-level property (all sizes of a Nut Bolt are still counted in pcs).
+  final String unitType;
+  final String unit;
   final String status;
   final DateTime? createdAt;
 
@@ -43,6 +50,8 @@ class RawMaterial {
         name: m['name'] as String? ?? '',
         imageUrl: m['imageUrl'] as String? ?? '',
         note: m['note'] as String?,
+        unitType: m['unitType'] as String? ?? 'Pieces',
+        unit: m['unit'] as String? ?? 'pcs',
         status: m['status'] as String? ?? 'active',
         createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
       );
@@ -52,6 +61,8 @@ class RawMaterial {
         'name': name,
         'imageUrl': imageUrl,
         'note': note,
+        'unitType': unitType,
+        'unit': unit,
         'status': status,
         'createdAt': FieldValue.serverTimestamp(),
       };
@@ -60,6 +71,8 @@ class RawMaterial {
         'name': name,
         'imageUrl': imageUrl,
         'note': note,
+        'unitType': unitType,
+        'unit': unit,
         'status': status,
         'updatedAt': FieldValue.serverTimestamp(),
       };

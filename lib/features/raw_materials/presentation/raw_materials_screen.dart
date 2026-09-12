@@ -11,11 +11,12 @@ import '../domain/raw_material.dart';
 import '../domain/raw_material_variant.dart';
 import 'raw_material_form_screen.dart';
 import 'raw_material_providers.dart';
+import 'raw_material_stock_sheet.dart';
 import 'raw_material_variants_screen.dart';
 
-/// Admin → Operations → Raw Material. Lists raw materials; each shows how many
-/// variants it has. A persistent button below adds a new material, and tapping a
-/// material drills into its variants (sizes / specs) to manage stock.
+/// Admin → Operations → Raw Material. Lists raw materials. A "single" material
+/// shows its stock and manages it inline; a material with variants shows how
+/// many it has and drills into them. A persistent button below adds a new one.
 class RawMaterialsScreen extends ConsumerStatefulWidget {
   const RawMaterialsScreen({super.key});
 
@@ -43,13 +44,22 @@ class _RawMaterialsScreenState extends ConsumerState<RawMaterialsScreen> {
         builder: (_) => RawMaterialVariantsScreen(materialId: m.id)));
   }
 
+  void _manageStock(RawMaterialVariant v) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => RawMaterialStockSheet(variant: v),
+    );
+  }
+
   Future<void> _delete(RawMaterial m) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete raw material'),
         content: Text(
-            'Delete "${m.name}" and all of its variants? This cannot be undone.'),
+            'Delete "${m.name}" and all of its stock? This cannot be undone.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -135,9 +145,14 @@ class _RawMaterialsScreenState extends ConsumerState<RawMaterialsScreen> {
                               m: list[i],
                               variants:
                                   ref.watch(variantsOfProvider(list[i].id)),
-                              onTap: () => _openVariants(list[i]),
+                              onTapSimple: _manageStock,
+                              onTapVariants: () => _openVariants(list[i]),
                               onSelect: (a) {
                                 switch (a) {
+                                  case 'stock':
+                                    final vs = ref
+                                        .read(variantsOfProvider(list[i].id));
+                                    if (vs.isNotEmpty) _manageStock(vs.first);
                                   case 'edit':
                                     _openForm(existing: list[i]);
                                   case 'delete':
@@ -173,14 +188,17 @@ class _RawMaterialsScreenState extends ConsumerState<RawMaterialsScreen> {
 }
 
 class _RawCard extends StatelessWidget {
-  const _RawCard(
-      {required this.m,
-      required this.variants,
-      required this.onTap,
-      required this.onSelect});
+  const _RawCard({
+    required this.m,
+    required this.variants,
+    required this.onTapSimple,
+    required this.onTapVariants,
+    required this.onSelect,
+  });
   final RawMaterial m;
   final List<RawMaterialVariant> variants;
-  final VoidCallback onTap;
+  final ValueChanged<RawMaterialVariant> onTapSimple;
+  final VoidCallback onTapVariants;
   final ValueChanged<String> onSelect;
 
   @override
@@ -188,16 +206,66 @@ class _RawCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final img = appImageProvider(m.imageUrl);
-    final outCount = variants.where((v) => v.isOutOfStock).length;
-    final lowCount = variants.where((v) => v.isLowStock).length;
-    final subtitle = variants.isEmpty
-        ? 'No variants yet — tap to add'
-        : '${variants.length} variant${variants.length == 1 ? '' : 's'}';
+    final simple = isSimpleVariantList(variants);
+    final v = variants.isNotEmpty ? variants.first : null;
+
+    // Subtitle + badges differ for single vs variant materials.
+    final Widget subtitle;
+    if (variants.isEmpty) {
+      subtitle = Text('No stock yet',
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: scheme.onSurfaceVariant));
+    } else if (simple && v != null) {
+      subtitle = Row(
+        children: [
+          _pill(
+            'Stock: ${fmtQty(v.currentStock)} ${v.unit}',
+            v.isOutOfStock || v.isLowStock ? AppColors.error : scheme.primary,
+          ),
+          if (v.isOutOfStock) ...[
+            const SizedBox(width: 6),
+            _pill('Out of stock', AppColors.error),
+          ] else if (v.isLowStock) ...[
+            const SizedBox(width: 6),
+            _pill('Low', AppColors.warning),
+          ],
+        ],
+      );
+    } else {
+      final outCount = variants.where((x) => x.isOutOfStock).length;
+      final lowCount = variants.where((x) => x.isLowStock).length;
+      subtitle = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${variants.length} variants · ${m.unit}',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+          if (outCount > 0 || lowCount > 0) ...[
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              children: [
+                if (outCount > 0)
+                  _pill('$outCount out of stock', AppColors.error),
+                if (lowCount > 0) _pill('$lowCount low', AppColors.warning),
+              ],
+            ),
+          ],
+        ],
+      );
+    }
+
     return Card(
       margin: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
+        onTap: () {
+          if (simple && v != null) {
+            onTapSimple(v);
+          } else {
+            onTapVariants();
+          }
+        },
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.md),
           child: Row(
@@ -227,31 +295,20 @@ class _RawCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 2),
-                    Text(subtitle,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: scheme.onSurfaceVariant)),
-                    if (outCount > 0 || lowCount > 0) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        children: [
-                          if (outCount > 0)
-                            _pill('$outCount out of stock', AppColors.error),
-                          if (lowCount > 0)
-                            _pill('$lowCount low', AppColors.warning),
-                        ],
-                      ),
-                    ],
+                    const SizedBox(height: 4),
+                    subtitle,
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right),
+              if (!simple) const Icon(Icons.chevron_right),
               PopupMenuButton<String>(
                 onSelected: onSelect,
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'edit', child: Text('Edit')),
-                  PopupMenuItem(
+                itemBuilder: (_) => [
+                  if (simple)
+                    const PopupMenuItem(
+                        value: 'stock', child: Text('Update stock')),
+                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  const PopupMenuItem(
                       value: 'delete',
                       child: Text('Delete',
                           style: TextStyle(color: AppColors.error))),

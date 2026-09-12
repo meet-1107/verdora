@@ -60,6 +60,13 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
     final all = ref.watch(rawVariantsProvider).valueOrNull ?? const [];
     final v = all.firstWhere((x) => x.id == widget.variant.id,
         orElse: () => widget.variant);
+    // A default variant (blank label) belongs to a "single" material — show the
+    // material's name as the title instead of an empty label.
+    final materials = ref.watch(rawMaterialsProvider).valueOrNull ?? const [];
+    final title = v.label.trim().isNotEmpty
+        ? v.label
+        : (materials.where((m) => m.id == v.rawMaterialId).firstOrNull?.name ??
+            'Stock');
     final uid = ref.read(currentUserProvider).valueOrNull?.uid;
     final repo = ref.read(rawMaterialRepositoryProvider);
     final txns = ref.watch(rawVariantTxnsProvider(v.id)).valueOrNull ?? const [];
@@ -76,7 +83,7 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
             Text('Manage stock',
                 style: theme.textTheme.titleMedium
                     ?.copyWith(fontWeight: FontWeight.w700)),
-            Text(v.label,
+            Text(title,
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(height: AppSpacing.md),

@@ -896,7 +896,9 @@ class _VariantFormState extends ConsumerState<_VariantFormDialog> {
 
     String labelFor(RawMaterialVariant v) {
       final mat = names[v.rawMaterialId] ?? 'Material';
-      return '$mat · ${v.label} (${v.unit})';
+      return v.label.trim().isEmpty
+          ? '$mat (${v.unit})'
+          : '$mat · ${v.label} (${v.unit})';
     }
 
     final sorted = [...rawVariants]
