@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import 'responsive.dart';
@@ -22,7 +23,7 @@ class ShellDestination {
 ///
 /// Works with go_router's [StatefulNavigationShell] for stateful branch
 /// navigation (each tab keeps its own navigation stack).
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
     required this.navigationShell,
@@ -36,13 +37,49 @@ class AppShell extends StatelessWidget {
   final String title;
   final Widget? trailing;
 
-  void _go(int index) => navigationShell.goBranch(
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  DateTime? _lastBack;
+
+  void _go(int index) => widget.navigationShell.goBranch(
         index,
-        initialLocation: index == navigationShell.currentIndex,
+        initialLocation: index == widget.navigationShell.currentIndex,
       );
+
+  /// Back button: first press shows a hint, a second press within 2 seconds
+  /// exits the app. Applies to every client tab.
+  void _onBack(bool didPop) {
+    if (didPop) return;
+    final now = DateTime.now();
+    if (_lastBack != null &&
+        now.difference(_lastBack!) < const Duration(seconds: 2)) {
+      SystemNavigator.pop();
+      return;
+    }
+    _lastBack = now;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Press back again to exit'),
+      duration: Duration(seconds: 2),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) => _onBack(didPop),
+      child: _buildShell(context),
+    );
+  }
+
+  Widget _buildShell(BuildContext context) {
+    final navigationShell = widget.navigationShell;
+    final destinations = widget.destinations;
+    final title = widget.title;
+    final trailing = widget.trailing;
     final index = navigationShell.currentIndex;
 
     if (Responsive.isMobile(context)) {

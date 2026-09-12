@@ -68,7 +68,7 @@ class ClientProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.lg),
           SizedBox(
-            height: 118,
+            height: 156,
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
