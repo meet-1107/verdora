@@ -283,6 +283,8 @@ class _RawCardState extends ConsumerState<_RawCard> {
                       switch (a) {
                         case 'stock':
                           if (v != null) _stockSheet(v);
+                        case 'add_variant':
+                          _addVariant();
                         case 'edit':
                           widget.onEditMaterial();
                         case 'delete':
@@ -293,6 +295,9 @@ class _RawCardState extends ConsumerState<_RawCard> {
                       if (simple)
                         const PopupMenuItem(
                             value: 'stock', child: Text('Update stock')),
+                      if (!simple && variants.isNotEmpty)
+                        const PopupMenuItem(
+                            value: 'add_variant', child: Text('Add variant')),
                       const PopupMenuItem(value: 'edit', child: Text('Edit')),
                       const PopupMenuItem(
                           value: 'delete',
@@ -322,18 +327,7 @@ class _RawCardState extends ConsumerState<_RawCard> {
                   }
                 },
               ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md, AppSpacing.xs, AppSpacing.md, AppSpacing.sm),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _addVariant,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add variant'),
-                ),
-              ),
-            ),
+            const SizedBox(height: AppSpacing.xs),
           ],
         ],
       ),

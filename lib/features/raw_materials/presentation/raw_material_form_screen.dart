@@ -135,8 +135,8 @@ class _RawMaterialFormScreenState extends ConsumerState<RawMaterialFormScreen> {
                 companyId: user.companyId,
                 rawMaterialId: id,
                 label: label,
-                unitType: row.unitType,
-                unit: row.unit,
+                unitType: _unitType,
+                unit: _unit,
                 currentStock: double.tryParse(row.opening.text.trim()) ?? 0,
                 minStock: double.tryParse(row.min.text.trim()) ?? 0,
               ),
@@ -345,8 +345,7 @@ class _RawMaterialFormScreenState extends ConsumerState<RawMaterialFormScreen> {
                       ?.copyWith(fontWeight: FontWeight.w600)),
             ),
             TextButton.icon(
-              onPressed: () => setState(() => _variants
-                  .add(_VariantRow(unitType: _unitType, unit: _unit))),
+              onPressed: () => setState(() => _variants.add(_VariantRow())),
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Add variant'),
             ),
@@ -385,48 +384,6 @@ class _RawMaterialFormScreenState extends ConsumerState<RawMaterialFormScreen> {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                // Per-variant unit type → unit.
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _variants[i].unitType,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                            isDense: true, labelText: 'Unit type'),
-                        items: rawMaterialUnitTypes.keys
-                            .map((t) =>
-                                DropdownMenuItem(value: t, child: Text(t)))
-                            .toList(),
-                        onChanged: (t) {
-                          if (t == null) return;
-                          setState(() {
-                            _variants[i].unitType = t;
-                            _variants[i].unit =
-                                rawMaterialUnitTypes[t]!.first;
-                          });
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _variants[i].unit,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                            isDense: true, labelText: 'Unit'),
-                        items: (rawMaterialUnitTypes[_variants[i].unitType] ??
-                                const [])
-                            .map((u) =>
-                                DropdownMenuItem(value: u, child: Text(u)))
-                            .toList(),
-                        onChanged: (u) => setState(() =>
-                            _variants[i].unit = u ?? _variants[i].unit),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.xs),
                 Row(
                   children: [
                     Expanded(
@@ -440,7 +397,7 @@ class _RawMaterialFormScreenState extends ConsumerState<RawMaterialFormScreen> {
                         decoration: InputDecoration(
                             isDense: true,
                             labelText: 'Opening',
-                            suffixText: _variants[i].unit),
+                            suffixText: _unit),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
@@ -455,7 +412,7 @@ class _RawMaterialFormScreenState extends ConsumerState<RawMaterialFormScreen> {
                         decoration: InputDecoration(
                             isDense: true,
                             labelText: 'Low at',
-                            suffixText: _variants[i].unit),
+                            suffixText: _unit),
                       ),
                     ),
                   ],
@@ -500,12 +457,9 @@ class _EditHint extends StatelessWidget {
 }
 
 class _VariantRow {
-  _VariantRow({required this.unitType, required this.unit});
   final TextEditingController label = TextEditingController();
   final TextEditingController opening = TextEditingController();
   final TextEditingController min = TextEditingController();
-  String unitType;
-  String unit;
   void dispose() {
     label.dispose();
     opening.dispose();
