@@ -22,10 +22,10 @@ class _SplashGateState extends State<SplashGate> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(milliseconds: 2200), () {
+    Future.delayed(const Duration(milliseconds: 1100), () {
       if (mounted) setState(() => _fade = true);
     });
-    Future.delayed(const Duration(milliseconds: 2700), () {
+    Future.delayed(const Duration(milliseconds: 1500), () {
       if (mounted) setState(() => _show = false);
     });
   }

@@ -155,18 +155,21 @@ class _ClientOrdersScreenState extends ConsumerState<ClientOrdersScreen> {
               ),
               Expanded(
                 child: list.isEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.only(top: AppSpacing.xxl),
-                        child: EmptyView(
-                          message: 'No matching orders.',
-                          icon: Icons.search_off,
-                          action: FilledButton.tonal(
-                            onPressed: () => setState(() {
-                              _search.clear();
-                              _query = '';
-                              _filter = null;
-                            }),
-                            child: const Text('Clear search'),
+                    ? SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.xl),
+                          child: EmptyView(
+                            message: 'No matching orders.',
+                            icon: Icons.search_off,
+                            action: FilledButton.tonal(
+                              onPressed: () => setState(() {
+                                _search.clear();
+                                _query = '';
+                                _filter = null;
+                              }),
+                              child: const Text('Clear search'),
+                            ),
                           ),
                         ),
                       )
