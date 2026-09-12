@@ -13,6 +13,7 @@ import '../../import_engine/logic/product_import_executor.dart';
 import '../../import_engine/presentation/import_screen.dart';
 import '../../import_engine/presentation/zip_image_import_screen.dart';
 import '../../inventory/presentation/inventory_providers.dart';
+import '../../inventory/presentation/inventory_screen.dart';
 import '../../subcategories/domain/subcategory.dart';
 import '../../subcategories/presentation/subcategory_providers.dart';
 import '../data/product_repository.dart';
@@ -610,7 +611,14 @@ class _ProductInfoCard extends StatelessWidget {
                   ? _VariantsPanel(
                       sizes: sizes,
                       onAdd: onEdit,
-                      onEditSize: (_) => onEdit(),
+                      onEditSize: (v) => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        shape: const RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.vertical(top: Radius.circular(20))),
+                        builder: (_) => EditStockSheet(variant: v),
+                      ),
                     )
                   : const SizedBox(width: double.infinity),
             ),
@@ -785,7 +793,7 @@ class _VariantsPanel extends StatelessWidget {
           SizedBox(
             width: 34,
             child: IconButton(
-              tooltip: 'Edit variant',
+              tooltip: 'Update stock',
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               icon: const Icon(Icons.edit_outlined, size: 18, color: _kPrimary),
