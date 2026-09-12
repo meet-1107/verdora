@@ -257,7 +257,9 @@ class _ActionGrid extends StatelessWidget {
         physics: const NeverScrollableScrollPhysics(),
         mainAxisSpacing: AppSpacing.lg,
         crossAxisSpacing: AppSpacing.lg,
-        childAspectRatio: cols == 1 ? 3.0 : 1.35,
+        // A little more height (esp. single column) so the icon row, label and
+        // action button never overflow — including at larger text scales.
+        childAspectRatio: cols == 1 ? 2.4 : 1.3,
         children: [for (final c in cards) _ActionCard(data: c)],
       );
     });
