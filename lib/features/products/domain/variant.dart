@@ -1,17 +1,40 @@
 /// One line of a variant's bill of materials: how much of a given raw-material
-/// variant is consumed to make a single unit of the product variant. [qty] is in
-/// the raw-material variant's own unit (kg, meter, pcs…).
+/// variant is consumed to make a single unit of the product variant.
+///
+/// [qty] is always in the raw-material variant's OWN unit (kg, meter, pcs…) — it
+/// is what stock deduction uses. [amount] + [unit] remember what the user
+/// actually typed (e.g. 500 gram) so the entry can be shown and edited in that
+/// unit even when it differs from the raw material's unit.
 class BomLine {
-  const BomLine({required this.rawVariantId, required this.qty});
+  const BomLine({
+    required this.rawVariantId,
+    required this.qty,
+    this.amount = 0,
+    this.unit = '',
+  });
+
   final String rawVariantId;
   final double qty;
+  final double amount;
+  final String unit;
 
-  factory BomLine.fromMap(Map<String, dynamic> m) => BomLine(
-        rawVariantId: m['rawVariantId'] as String? ?? '',
-        qty: (m['qty'] as num?)?.toDouble() ?? 0,
-      );
+  factory BomLine.fromMap(Map<String, dynamic> m) {
+    final qty = (m['qty'] as num?)?.toDouble() ?? 0;
+    return BomLine(
+      rawVariantId: m['rawVariantId'] as String? ?? '',
+      qty: qty,
+      // Older entries stored only qty (already in the raw unit).
+      amount: (m['amount'] as num?)?.toDouble() ?? qty,
+      unit: m['unit'] as String? ?? '',
+    );
+  }
 
-  Map<String, dynamic> toMap() => {'rawVariantId': rawVariantId, 'qty': qty};
+  Map<String, dynamic> toMap() => {
+        'rawVariantId': rawVariantId,
+        'qty': qty,
+        'amount': amount,
+        'unit': unit,
+      };
 }
 
 /// A sellable variant of a product (`variants/{id}`), e.g. "20 mm".

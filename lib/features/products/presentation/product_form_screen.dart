@@ -10,15 +10,13 @@ import '../../../core/widgets/key_value_editor.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../categories/presentation/category_providers.dart';
-import '../../raw_materials/domain/raw_material.dart';
-import '../../raw_materials/domain/raw_material_variant.dart';
-import '../../raw_materials/presentation/raw_material_providers.dart';
 import '../../subcategories/presentation/subcategory_providers.dart';
 import '../data/product_repository.dart';
 import '../data/variant_repository.dart';
 import '../domain/product.dart';
 import '../domain/variant.dart';
 import 'product_providers.dart';
+import 'raw_material_usage_screen.dart';
 
 /// Full-page editor for a product's core fields + dynamic attributes, plus its
 /// variants. Variants can be managed once the product exists (has an id).
@@ -886,115 +884,55 @@ class _VariantFormState extends ConsumerState<_VariantFormDialog> {
     }
   }
 
-  /// Raw materials consumed per unit produced. Each line picks a raw-material
-  /// variant and a quantity in that variant's own unit.
+  /// Summary tile that opens the full "Raw materials used" editor.
   Widget _buildBomSection(BuildContext context) {
     final theme = Theme.of(context);
-    final rawVariants = ref.watch(rawVariantsProvider).valueOrNull ?? const [];
-    final materials = ref.watch(rawMaterialsProvider).valueOrNull ?? const [];
-    final names = {for (final m in materials) m.id: m.name};
-
-    String labelFor(RawMaterialVariant v) {
-      final mat = names[v.rawMaterialId] ?? 'Material';
-      return v.label.trim().isEmpty
-          ? '$mat (${v.unit})'
-          : '$mat · ${v.label} (${v.unit})';
-    }
-
-    final sorted = [...rawVariants]
-      ..sort((a, b) => labelFor(a).toLowerCase().compareTo(
-            labelFor(b).toLowerCase(),
-          ));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text('Raw materials used',
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w700)),
-            ),
-            TextButton.icon(
-              onPressed: rawVariants.isEmpty
-                  ? null
-                  : () => setState(
-                      () => _bom.add(const BomLine(rawVariantId: '', qty: 0))),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add'),
-            ),
-          ],
-        ),
-        Text(
-          rawVariants.isEmpty
-              ? 'Add raw materials (with variants) first to link them here.'
-              : 'Consumed from raw-material stock when this size is dispatched.',
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
-        for (var i = 0; i < _bom.length; i++) ...[
-          const SizedBox(height: AppSpacing.sm),
-          Builder(builder: (_) {
-            final line = _bom[i];
-            // The selected raw variant (if it still exists) → drives the unit.
-            final selected = sorted
-                .where((v) => v.id == line.rawVariantId)
-                .cast<RawMaterialVariant?>()
-                .firstOrNull;
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: DropdownButtonFormField<String>(
-                    initialValue:
-                        line.rawVariantId.isEmpty ? null : line.rawVariantId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                        isDense: true, labelText: 'Raw material'),
-                    items: [
-                      for (final v in sorted)
-                        DropdownMenuItem(
-                            value: v.id,
-                            child: Text(labelFor(v),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis)),
-                    ],
-                    onChanged: (id) => setState(() {
-                      _bom[i] =
-                          BomLine(rawVariantId: id ?? '', qty: _bom[i].qty);
-                    }),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  flex: 2,
-                  child: TextFormField(
-                    key: ValueKey('bomqty_$i'),
-                    initialValue: line.qty > 0 ? fmtQty(line.qty) : '',
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      labelText: 'Qty / unit',
-                      suffixText: selected?.unit,
+    final count = _bom.where((b) => b.rawVariantId.isNotEmpty).length;
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: _openBomEditor,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Row(
+            children: [
+              Icon(Icons.science_outlined,
+                  color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Raw materials used',
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(
+                      count == 0
+                          ? 'None linked — tap to add'
+                          : '$count raw material${count == 1 ? '' : 's'} linked',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
-                    onChanged: (t) => _bom[i] = BomLine(
-                        rawVariantId: _bom[i].rawVariantId,
-                        qty: double.tryParse(t.trim()) ?? 0),
-                  ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => setState(() => _bom.removeAt(i)),
-                ),
-              ],
-            );
-          }),
-        ],
-      ],
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
     );
+  }
+
+  Future<void> _openBomEditor() async {
+    final result = await Navigator.of(context).push<List<BomLine>>(
+      MaterialPageRoute(
+          builder: (_) => RawMaterialUsageScreen(initial: _bom)),
+    );
+    if (result != null) setState(() => _bom = result);
   }
 
   @override
