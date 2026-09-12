@@ -139,6 +139,24 @@ class OrderRepository {
   Future<void> markPacked(Order order, {String? createdBy}) =>
       setStatus(order.id, OrderStatus.packed);
 
+  /// Moves an order to **packing** and snapshots each line's agreed quantity into
+  /// `orderedQty`, so any later pack-short (edited-down or unpicked line) can be
+  /// measured against what was agreed.
+  Future<void> startPacking(String orderId) async {
+    final itemsSnap =
+        await _orderItems.where('orderId', isEqualTo: orderId).get();
+    final batch = _db.batch();
+    for (final d in itemsSnap.docs) {
+      final qty = (d.data()['quantity'] as num?)?.toInt() ?? 0;
+      batch.update(d.reference, {'orderedQty': qty});
+    }
+    batch.update(_orders.doc(orderId), {
+      'status': OrderStatus.packing.value,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+  }
+
   /// Moves an order to "dispatched" and, the first time, removes each line's
   /// quantity from stock. Stock is deducted on DISPATCH so nothing leaves the
   /// books until the goods actually ship. [Order.stockDeducted] guards against
@@ -166,13 +184,15 @@ class OrderRepository {
     final items =
         itemsSnap.docs.map((d) => OrderItem.fromMap(d.id, d.data())).toList();
 
-    // Split each line into packed-now and short quantities.
+    // Split each line into packed-now and short quantities, measured against the
+    // agreed (ordered) quantity so edited-down / unpicked lines are backordered.
     final shortItems = <OrderItem>[];
     var anyPacked = false;
     for (final it in items) {
-      final raw = packByItem[it.id] ?? it.quantity;
-      final take = raw < 0 ? 0 : (raw > it.quantity ? it.quantity : raw);
-      final short = it.quantity - take;
+      final agreed = it.orderedTotal;
+      final raw = packByItem[it.id] ?? agreed;
+      final take = raw < 0 ? 0 : (raw > agreed ? agreed : raw);
+      final short = agreed - take;
       if (take > 0) anyPacked = true;
       if (short > 0) {
         shortItems.add(OrderItem(
@@ -231,8 +251,9 @@ class OrderRepository {
     final batch = _db.batch();
     final packed = <OrderItem>[];
     for (final it in items) {
-      final raw = packByItem[it.id] ?? it.quantity;
-      final take = raw < 0 ? 0 : (raw > it.quantity ? it.quantity : raw);
+      final agreed = it.orderedTotal;
+      final raw = packByItem[it.id] ?? agreed;
+      final take = raw < 0 ? 0 : (raw > agreed ? agreed : raw);
       if (take <= 0) {
         batch.delete(_orderItems.doc(it.id)); // fully backordered
         continue;
@@ -250,12 +271,11 @@ class OrderRepository {
         taxPercent: it.taxPercent,
         picked: it.picked,
       ));
-      if (take != it.quantity) {
-        batch.update(_orderItems.doc(it.id), {
-          'quantity': take,
-          'total': it.rate * take * (1 - it.discountPercent / 100)
-        });
-      }
+      batch.update(_orderItems.doc(it.id), {
+        'quantity': take,
+        'orderedQty': take,
+        'total': it.rate * take * (1 - it.discountPercent / 100)
+      });
     }
     final totals = _totalsFor(packed, order.globalDiscountPercent);
     batch.update(_orders.doc(order.id), {

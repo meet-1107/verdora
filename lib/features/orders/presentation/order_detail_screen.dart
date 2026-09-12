@@ -106,7 +106,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
     final repo = ref.read(orderRepositoryProvider);
     final logger = ref.read(activityLoggerProvider);
     _act(() async {
-      await repo.setStatus(o.id, OrderStatus.packing);
+      await repo.startPacking(o.id);
       await logger.record('order.packing', target: _label(o));
       await _notifyStatus(o, OrderStatus.packing);
     }, 'Packing started — client notified.');
@@ -137,28 +137,54 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
     }, 'Marked ${next.label} — client notified.');
   }
 
-  /// Opens the packing dialog: the admin sets how much of each line to pack now
-  /// (defaulting to what's in stock); any shortfall is split into a PENDING
-  /// backorder, and the packed items move on to dispatch.
+  /// Confirms Mark Packed. The pack quantity per line comes from the Products
+  /// tab: an UNPICKED line packs 0 (fully backordered); a picked line packs its
+  /// (possibly edited-down) quantity. Anything short of the agreed quantity is
+  /// listed for confirmation, then split into a PENDING backorder.
   Future<void> _packSplit(Order o) async {
     final items = ref.read(orderItemsProvider(o.id)).valueOrNull ?? const [];
     if (items.isEmpty) return;
-    final stockByVariant = <String, int>{
-      for (final v
-          in ref.read(allVariantsProvider).valueOrNull ?? const <Variant>[])
-        v.id: v.currentStock,
+
+    // Pack now = picked ? current qty : 0 (capped at the agreed quantity).
+    final packByItem = <String, int>{
+      for (final it in items)
+        it.id: it.picked
+            ? (it.quantity > it.orderedTotal ? it.orderedTotal : it.quantity)
+            : 0,
     };
-    final result = await showDialog<Map<String, int>>(
+    // Build the short-list for the confirmation message.
+    final shorts = <({String label, int short})>[];
+    var anyPack = false;
+    for (final it in items) {
+      final pack = packByItem[it.id]!;
+      if (pack > 0) anyPack = true;
+      final short = it.orderedTotal - pack;
+      if (short > 0) {
+        shorts.add((
+          label: [it.productName, it.variantLabel]
+              .where((s) => s.trim().isNotEmpty)
+              .join(' · '),
+          short: short,
+        ));
+      }
+    }
+
+    if (!anyPack) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Pick at least one item before marking packed.')));
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) =>
-          _DispatchDialog(items: items, stockByVariant: stockByVariant),
+      builder: (_) => _PackConfirmDialog(shorts: shorts),
     );
-    if (result == null) return;
+    if (confirmed != true) return;
 
     final repo = ref.read(orderRepositoryProvider);
     final logger = ref.read(activityLoggerProvider);
     await _act(() async {
-      final back = await repo.packWithBackorder(order: o, packByItem: result);
+      final back = await repo.packWithBackorder(order: o, packByItem: packByItem);
       await logger.record('order.packed', target: _label(o));
       await _notifyStatus(o, OrderStatus.packed);
       if (back != null) {
@@ -171,7 +197,10 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
                   'once back in stock.',
             );
       }
-    }, 'Packed — short items moved to a pending backorder.');
+    },
+        shorts.isEmpty
+            ? 'Packed — client notified.'
+            : 'Packed — short items moved to a pending backorder.');
   }
 
   /// Sends the dealer an in-app notification describing a status change. Approve
@@ -2176,160 +2205,84 @@ class _ActivityTab extends ConsumerWidget {
   }
 }
 
+
 // ---------------------------------------------------------------------------
-// Dispatch dialog — choose how much of each line to send now; the rest is
-// split off into a linked backorder.
+// Pack confirmation — lists the short (edited-down / unpicked) variants that
+// will move to a pending backorder.
 // ---------------------------------------------------------------------------
 
-class _DispatchDialog extends StatefulWidget {
-  const _DispatchDialog({required this.items, required this.stockByVariant});
-  final List<OrderItem> items;
-  final Map<String, int> stockByVariant;
-
-  @override
-  State<_DispatchDialog> createState() => _DispatchDialogState();
-}
-
-class _DispatchDialogState extends State<_DispatchDialog> {
-  late final Map<String, TextEditingController> _ctrls;
-
-  int _available(OrderItem it) {
-    final s = widget.stockByVariant[it.variantId] ?? 0;
-    return s < 0 ? 0 : s;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrls = {
-      for (final it in widget.items)
-        it.id: TextEditingController(
-            // Default to what's actually in stock (capped at the ordered qty).
-            text: '${it.quantity < _available(it) ? it.quantity : _available(it)}'),
-    };
-  }
-
-  @override
-  void dispose() {
-    for (final c in _ctrls.values) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  int _send(OrderItem it) {
-    final v = int.tryParse(_ctrls[it.id]!.text.trim()) ?? 0;
-    if (v < 0) return 0;
-    return v > it.quantity ? it.quantity : v;
-  }
+class _PackConfirmDialog extends StatelessWidget {
+  const _PackConfirmDialog({required this.shorts});
+  final List<({String label, int short})> shorts;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final shortLines =
-        widget.items.where((it) => _send(it) < it.quantity).length;
-
     return AlertDialog(
-      title: const Text('Pack order'),
+      title: const Text('Mark packed?'),
       content: SizedBox(
         width: (MediaQuery.sizeOf(context).width - 80).clamp(280.0, 460.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Set how many of each item to pack now. Short items move to a new '
-              'pending backorder.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Flexible(
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: widget.items.length,
-                separatorBuilder: (_, __) => const Divider(height: 16),
-                itemBuilder: (_, i) {
-                  final it = widget.items[i];
-                  final avail = _available(it);
-                  final send = _send(it);
-                  final short = it.quantity - send;
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
+            if (shorts.isEmpty)
+              Text('All items will be packed in full and moved to dispatch.',
+                  style: theme.textTheme.bodyMedium)
+            else ...[
+              Text(
+                'These items are short and will move to a new pending '
+                'backorder:',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final s in shorts)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              [it.productName, it.variantLabel]
-                                  .where((s) => s.trim().isNotEmpty)
-                                  .join(' · '),
-                              style: theme.textTheme.bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            const Icon(Icons.remove_circle_outline,
+                                size: 16, color: AppColors.warning),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(s.label,
+                                  style: theme.textTheme.bodySmall),
                             ),
-                            const SizedBox(height: 2),
-                            Text('Ordered ${it.quantity} · In stock $avail',
+                            const SizedBox(width: 6),
+                            Text('short ${s.short}',
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                    color: scheme.onSurfaceVariant)),
-                            if (short > 0)
-                              Text('Backorder: $short',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                      color: AppColors.warning,
-                                      fontWeight: FontWeight.w700)),
+                                    color: AppColors.warning,
+                                    fontWeight: FontWeight.w700)),
                           ],
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      SizedBox(
-                        width: 64,
-                        child: TextField(
-                          controller: _ctrls[it.id],
-                          textAlign: TextAlign.center,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly
-                          ],
-                          onChanged: (_) => setState(() {}),
-                          decoration: const InputDecoration(
-                              isDense: true, labelText: 'Pack'),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            if (shortLines > 0)
-              Text('$shortLines item(s) will be backordered.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppColors.warning, fontWeight: FontWeight.w700))
-            else
-              Text('All items in full.',
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                  'The available quantities will be packed and dispatched; the '
+                  'short quantities stay pending for later.',
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: scheme.onSurfaceVariant)),
+            ],
           ],
         ),
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel')),
         FilledButton(
-          onPressed: () {
-            final total =
-                widget.items.fold<int>(0, (s, it) => s + _send(it));
-            if (total <= 0) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Set a quantity for at least one item.')));
-              return;
-            }
-            Navigator.pop(context,
-                {for (final it in widget.items) it.id: _send(it)});
-          },
-          child: const Text('Pack'),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Mark packed'),
         ),
       ],
     );

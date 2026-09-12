@@ -162,6 +162,7 @@ class OrderItem {
     this.discountPercent = 0,
     this.taxPercent = 0,
     this.picked = false,
+    this.orderedQty = 0,
   });
 
   final String id;
@@ -178,6 +179,14 @@ class OrderItem {
   /// Warehouse pick flag: true once this line's quantity has been pulled from
   /// the warehouse during packing (set by the admin on the order Products tab).
   final bool picked;
+
+  /// The agreed quantity when packing began (snapshotted). Used to work out how
+  /// much is short if the admin packs less than this. 0 means "same as
+  /// [quantity]" (not yet snapshotted).
+  final int orderedQty;
+
+  /// The agreed quantity to measure shortfall against.
+  int get orderedTotal => orderedQty > 0 ? orderedQty : quantity;
 
   double get gross => rate * quantity;
   double get discountAmount => gross * discountPercent / 100;
@@ -198,6 +207,7 @@ class OrderItem {
       discountPercent: (map['discountPercent'] as num?)?.toDouble() ?? 0,
       taxPercent: (map['taxPercent'] as num?)?.toDouble() ?? 0,
       picked: map['picked'] as bool? ?? false,
+      orderedQty: (map['orderedQty'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -209,6 +219,7 @@ class OrderItem {
         'variantLabel': variantLabel,
         'rate': rate,
         'quantity': quantity,
+        'orderedQty': orderedTotal,
         'discountPercent': discountPercent,
         'taxPercent': taxPercent,
         'picked': picked,
