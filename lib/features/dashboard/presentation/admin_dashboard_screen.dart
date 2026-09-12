@@ -277,9 +277,9 @@ class _ActionGrid extends StatelessWidget {
         physics: const NeverScrollableScrollPhysics(),
         mainAxisSpacing: AppSpacing.lg,
         crossAxisSpacing: AppSpacing.lg,
-        // Taller cells so the icon row, label and action button never overflow,
-        // including at larger text scales.
-        childAspectRatio: 1.25,
+        // Taller cells so the icon row, a two-line label and the action button
+        // never overflow, including at larger text scales.
+        childAspectRatio: cols == 4 ? 1.2 : 1.0,
         children: [for (final c in cards) _ActionCard(data: c)],
       );
     });
@@ -328,10 +328,14 @@ class _ActionCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),
-              Text(
-                data.label,
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w600),
+              Flexible(
+                child: Text(
+                  data.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
               ),
               const Spacer(),
               Align(
