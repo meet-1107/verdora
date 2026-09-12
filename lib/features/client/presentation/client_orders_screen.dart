@@ -564,6 +564,22 @@ class OrderTile extends ConsumerWidget {
                   AppStatusChip(
                       label: order.status.label,
                       statusValue: order.status.value),
+                  if (order.isBackorder) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text('Backorder',
+                          style: TextStyle(
+                              color: Color(0xFFB45309),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 10)),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.md),
                   Icon(Icons.chevron_right,
                       size: 20, color: scheme.onSurfaceVariant),

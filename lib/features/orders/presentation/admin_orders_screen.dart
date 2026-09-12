@@ -455,7 +455,26 @@ class _OrdersTable extends StatelessWidget {
                 DataRow(
                   onSelectChanged: (_) => onView(o),
                   cells: [
-                    DataCell(Text(o.displayId)),
+                    DataCell(o.isBackorder
+                        ? Row(mainAxisSize: MainAxisSize.min, children: [
+                            Flexible(child: Text(o.displayId)),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF59E0B)
+                                    .withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Text('Backorder',
+                                  style: TextStyle(
+                                      color: Color(0xFFB45309),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 10)),
+                            ),
+                          ])
+                        : Text(o.displayId)),
                     DataCell(
                       ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 200),

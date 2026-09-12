@@ -139,16 +139,20 @@ class OrderRepository {
   Future<void> markPacked(Order order, {String? createdBy}) =>
       setStatus(order.id, OrderStatus.packed);
 
-  /// Moves an order to **packing** and snapshots each line's agreed quantity into
-  /// `orderedQty`, so any later pack-short (edited-down or unpicked line) can be
-  /// measured against what was agreed.
+  /// Moves an order to **packing**. New orders already carry each line's agreed
+  /// (originally-ordered) quantity in `orderedQty` from creation; this only
+  /// backfills that field for older orders that predate it, so pack-shortfall is
+  /// always measured against what was originally ordered — never clobbering it.
   Future<void> startPacking(String orderId) async {
     final itemsSnap =
         await _orderItems.where('orderId', isEqualTo: orderId).get();
     final batch = _db.batch();
     for (final d in itemsSnap.docs) {
-      final qty = (d.data()['quantity'] as num?)?.toInt() ?? 0;
-      batch.update(d.reference, {'orderedQty': qty});
+      final existing = (d.data()['orderedQty'] as num?)?.toInt() ?? 0;
+      if (existing <= 0) {
+        final qty = (d.data()['quantity'] as num?)?.toInt() ?? 0;
+        batch.update(d.reference, {'orderedQty': qty});
+      }
     }
     batch.update(_orders.doc(orderId), {
       'status': OrderStatus.packing.value,
