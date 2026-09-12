@@ -272,7 +272,9 @@ class _ClientOrderDetailScreenState
         items.when(
           loading: () => const Padding(
               padding: EdgeInsets.all(AppSpacing.xl), child: LoadingView()),
-          error: (e, _) => ErrorView(error: e),
+          error: (e, _) => ErrorView(
+              error: e,
+              onRetry: () => ref.invalidate(orderItemsProvider(order.id))),
           data: (list) => Column(
             children: [
               for (final it in list)

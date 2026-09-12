@@ -320,7 +320,10 @@ class _VariantPickerSheet extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
         child: variants.when(
           loading: () => const LoadingView(),
-          error: (e, _) => ErrorView(error: e),
+          error: (e, _) => ErrorView(
+              error: e,
+              onRetry: () =>
+                  ref.invalidate(variantsByProductProvider(product.id))),
           data: (items) {
             final active = items.where((v) => v.status == 'active').toList();
             return ListView(

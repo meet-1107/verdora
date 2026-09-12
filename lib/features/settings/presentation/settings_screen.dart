@@ -24,7 +24,8 @@ class SettingsScreen extends ConsumerWidget {
           leading: const AdminMenuButton(), title: const Text('Settings')),
       body: settings.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(error: e),
+        error: (e, _) => ErrorView(
+            error: e, onRetry: () => ref.invalidate(companySettingsProvider)),
         data: (s) => _SettingsForm(initial: s),
       ),
     );

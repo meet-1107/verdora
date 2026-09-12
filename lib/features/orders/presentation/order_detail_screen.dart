@@ -1057,7 +1057,8 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
 
     return items.when(
       loading: () => const LoadingView(),
-      error: (e, _) => ErrorView(error: e),
+      error: (e, _) => ErrorView(
+          error: e, onRetry: () => ref.invalidate(orderItemsProvider(order.id))),
       data: (list) {
         if (list.isEmpty) {
           return const EmptyView(message: 'No line items on this order.');
@@ -2091,7 +2092,8 @@ class _ActivityTab extends ConsumerWidget {
     final logs = ref.watch(activityLogsProvider);
     return logs.when(
       loading: () => const LoadingView(),
-      error: (e, _) => ErrorView(error: e),
+      error: (e, _) => ErrorView(
+          error: e, onRetry: () => ref.invalidate(activityLogsProvider)),
       data: (all) {
         final mine = all
             .where((l) =>

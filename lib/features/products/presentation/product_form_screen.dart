@@ -284,7 +284,10 @@ class _VariantsSectionState extends ConsumerState<_VariantsSection> {
         variants.when(
           loading: () =>
               const Padding(padding: EdgeInsets.all(16), child: LoadingView()),
-          error: (e, _) => ErrorView(error: e),
+          error: (e, _) => ErrorView(
+              error: e,
+              onRetry: () =>
+                  ref.invalidate(variantsByProductProvider(productId!))),
           data: (items) {
             if (items.isEmpty) {
               return const _Hint('No sizes yet.');
