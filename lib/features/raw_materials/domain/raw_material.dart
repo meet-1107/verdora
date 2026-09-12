@@ -77,39 +77,3 @@ class RawMaterial {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 }
-
-/// A stock movement for a raw material variant
-/// (`raw_material_transactions/{id}`). Positive = stock in, negative = down.
-class RawMaterialTxn {
-  const RawMaterialTxn({
-    required this.id,
-    required this.rawMaterialId,
-    required this.variantId,
-    required this.quantity,
-    required this.type, // opening | production | purchase | return | add | adjust
-    this.note,
-    this.createdBy,
-    this.createdAt,
-  });
-
-  final String id;
-  final String rawMaterialId;
-  final String variantId;
-  final double quantity;
-  final String type;
-  final String? note;
-  final String? createdBy;
-  final DateTime? createdAt;
-
-  factory RawMaterialTxn.fromMap(String id, Map<String, dynamic> m) =>
-      RawMaterialTxn(
-        id: id,
-        rawMaterialId: m['rawMaterialId'] as String? ?? '',
-        variantId: m['variantId'] as String? ?? '',
-        quantity: (m['quantity'] as num?)?.toDouble() ?? 0,
-        type: m['type'] as String? ?? 'adjust',
-        note: m['note'] as String?,
-        createdBy: m['createdBy'] as String?,
-        createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
-      );
-}

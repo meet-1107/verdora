@@ -3,15 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/utils/formatters.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../data/raw_material_repository.dart';
 import '../domain/raw_material.dart';
 import '../domain/raw_material_variant.dart';
 import 'raw_material_providers.dart';
 
-/// Bottom sheet to manage a raw-material variant's stock: add more, set an exact
-/// amount, and review recent movements.
+/// Bottom sheet to manage a raw-material variant's stock: add more, return, or
+/// set an exact amount. No movement history is stored (kept out of the database).
 class RawMaterialStockSheet extends ConsumerStatefulWidget {
   const RawMaterialStockSheet({super.key, required this.variant});
   final RawMaterialVariant variant;
@@ -69,7 +68,6 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
             'Stock');
     final uid = ref.read(currentUserProvider).valueOrNull?.uid;
     final repo = ref.read(rawMaterialRepositoryProvider);
-    final txns = ref.watch(rawVariantTxnsProvider(v.id)).valueOrNull ?? const [];
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
 
     return Padding(
@@ -196,42 +194,6 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
               },
             ),
 
-            const SizedBox(height: AppSpacing.lg),
-            Text('Recent movements', style: theme.textTheme.titleSmall),
-            const SizedBox(height: AppSpacing.xs),
-            if (txns.isEmpty)
-              Text('No stock movements yet.',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant))
-            else
-              ...txns.take(12).map((t) {
-                final up = t.quantity >= 0;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Row(
-                    children: [
-                      Icon(up ? Icons.arrow_upward : Icons.arrow_downward,
-                          size: 16,
-                          color: up
-                              ? const Color(0xFF16A34A)
-                              : theme.colorScheme.error),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${_typeLabel(t.type)} · ${Formatters.dateTime(t.createdAt)}',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ),
-                      Text('${up ? '+' : ''}${fmtQty(t.quantity)} ${v.unit}',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: up
-                                  ? const Color(0xFF16A34A)
-                                  : theme.colorScheme.error)),
-                    ],
-                  ),
-                );
-              }),
             if (_busy)
               const Padding(
                 padding: EdgeInsets.only(top: AppSpacing.md),
@@ -242,17 +204,6 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
       ),
     );
   }
-
-  String _typeLabel(String t) => switch (t) {
-        'opening' => 'Opening stock',
-        'production' => 'Produced',
-        'purchase' => 'Purchased',
-        'return' => 'Returned',
-        'consume' => 'Consumed (order)',
-        'add' => 'Stock added',
-        'adjust' => 'Stock adjusted',
-        _ => t,
-      };
 
   Widget _row({
     required TextEditingController controller,

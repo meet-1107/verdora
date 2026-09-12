@@ -32,9 +32,3 @@ final variantsOfProvider =
 /// material with named sizes ("1/2", "3/4") is variant-based instead.
 bool isSimpleVariantList(List<RawMaterialVariant> vs) =>
     vs.length == 1 && vs.first.label.trim().isEmpty;
-
-/// Stock movements for a single variant.
-final rawVariantTxnsProvider =
-    StreamProvider.family<List<RawMaterialTxn>, String>((ref, variantId) {
-  return ref.watch(rawMaterialRepositoryProvider).watchVariantTxns(variantId);
-});

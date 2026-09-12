@@ -18,8 +18,6 @@ class RawMaterialRepository {
       _db.collection(Collections.rawMaterials);
   CollectionReference<Map<String, dynamic>> get _variants =>
       _db.collection(Collections.rawMaterialVariants);
-  CollectionReference<Map<String, dynamic>> get _txns =>
-      _db.collection(Collections.rawMaterialTransactions);
 
   // ---- materials (parents) --------------------------------------------
   Stream<List<RawMaterial>> watchAll(String companyId) {
@@ -57,10 +55,6 @@ class RawMaterialRepository {
 
   Future<String> addVariant(RawMaterialVariant v, {String? createdBy}) async {
     final ref = await _variants.add(v.toCreateMap());
-    if (v.currentStock != 0) {
-      await _logTxn(v.rawMaterialId, ref.id, v.currentStock, 'opening',
-          companyId: v.companyId, createdBy: createdBy, note: 'Opening stock');
-    }
     return ref.id;
   }
 
@@ -69,16 +63,16 @@ class RawMaterialRepository {
 
   Future<void> deleteVariant(String id) => _variants.doc(id).delete();
 
-  /// Moves a variant's stock by [delta] and records the movement.
-  /// [type] labels the movement — e.g. `production` / `purchase` (stock in),
-  /// `return` (stock out). A reduction is clamped so stock never goes below 0.
+  /// Moves a variant's stock by [delta]. [type]/[note]/[createdBy] are accepted
+  /// for call-site compatibility but no movement history is stored (kept out of
+  /// the database intentionally). A reduction is clamped so stock never goes
+  /// below 0.
   Future<void> addVariantStock(RawMaterialVariant v, double delta,
       {String type = 'add', String? note, String? createdBy}) async {
     if (delta == 0) return;
-    double applied = delta;
     if (delta < 0) {
       // Clamp a reduction (e.g. a return) so stock never goes negative.
-      if (v.currentStock + delta < 0) applied = -v.currentStock;
+      final applied = v.currentStock + delta < 0 ? -v.currentStock : delta;
       if (applied == 0) return;
       await _variants.doc(v.id).update({
         'currentStock': v.currentStock + applied,
@@ -90,47 +84,15 @@ class RawMaterialRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     }
-    await _logTxn(v.rawMaterialId, v.id, applied, type,
-        companyId: v.companyId, note: note, createdBy: createdBy);
   }
 
-  /// Sets a variant's stock to [newStock] (records the difference), clamped ≥ 0.
+  /// Sets a variant's stock to [newStock], clamped ≥ 0. No history is stored.
   Future<void> setVariantStock(RawMaterialVariant v, double newStock,
       {String? note, String? createdBy}) async {
     final clamped = newStock < 0 ? 0.0 : newStock;
-    final delta = clamped - v.currentStock;
     await _variants.doc(v.id).update({
       'currentStock': clamped,
       'updatedAt': FieldValue.serverTimestamp(),
-    });
-    if (delta != 0) {
-      await _logTxn(v.rawMaterialId, v.id, delta, 'adjust',
-          companyId: v.companyId, note: note, createdBy: createdBy);
-    }
-  }
-
-  Stream<List<RawMaterialTxn>> watchVariantTxns(String variantId) {
-    return _txns.where('variantId', isEqualTo: variantId).snapshots().map((s) {
-      final list =
-          s.docs.map((d) => RawMaterialTxn.fromMap(d.id, d.data())).toList();
-      list.sort((a, b) => (b.createdAt ?? DateTime(2000))
-          .compareTo(a.createdAt ?? DateTime(2000)));
-      return list;
-    });
-  }
-
-  Future<void> _logTxn(
-      String rawMaterialId, String variantId, double quantity, String type,
-      {required String companyId, String? note, String? createdBy}) {
-    return _txns.add({
-      'companyId': companyId,
-      'rawMaterialId': rawMaterialId,
-      'variantId': variantId,
-      'quantity': quantity,
-      'type': type,
-      'note': note,
-      'createdBy': createdBy,
-      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 }

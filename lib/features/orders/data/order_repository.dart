@@ -419,8 +419,8 @@ class OrderRepository {
   }
 
   /// Applies the accumulated [rawDelta] to `raw_material_variants` stock (clamped
-  /// at zero) and logs one `raw_material_transactions` entry per affected
-  /// variant, all into [batch].
+  /// at zero), into [batch]. No movement history is stored (kept out of the
+  /// database intentionally).
   Future<void> _applyRawConsumption(
     WriteBatch batch,
     String companyId,
@@ -444,21 +444,6 @@ class OrderRepository {
         'currentStock': newStock,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      batch.set(
-        _db.collection(Collections.rawMaterialTransactions).doc(),
-        {
-          'companyId': companyId,
-          'rawMaterialId': snap.data()?['rawMaterialId'],
-          'variantId': entry.key,
-          'quantity': applied,
-          'type': 'consume',
-          'note': reason,
-          'refType': 'order',
-          'refId': refId,
-          'createdBy': createdBy,
-          'createdAt': FieldValue.serverTimestamp(),
-        },
-      );
     }
   }
 
