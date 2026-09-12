@@ -22,5 +22,6 @@ class Collections {
   static const orderCounters = 'order_counters';
   static const importTemplates = 'import_templates';
   static const rawMaterials = 'raw_materials';
+  static const rawMaterialVariants = 'raw_material_variants';
   static const rawMaterialTransactions = 'raw_material_transactions';
 }

@@ -7,13 +7,14 @@ import '../../../core/utils/formatters.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../data/raw_material_repository.dart';
 import '../domain/raw_material.dart';
+import '../domain/raw_material_variant.dart';
 import 'raw_material_providers.dart';
 
-/// Bottom sheet to manage a raw material's stock: add more, set an exact amount,
-/// and review recent movements.
+/// Bottom sheet to manage a raw-material variant's stock: add more, set an exact
+/// amount, and review recent movements.
 class RawMaterialStockSheet extends ConsumerStatefulWidget {
-  const RawMaterialStockSheet({super.key, required this.material});
-  final RawMaterial material;
+  const RawMaterialStockSheet({super.key, required this.variant});
+  final RawMaterialVariant variant;
 
   @override
   ConsumerState<RawMaterialStockSheet> createState() =>
@@ -22,12 +23,15 @@ class RawMaterialStockSheet extends ConsumerStatefulWidget {
 
 class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
   final _add = TextEditingController();
+  final _return = TextEditingController();
   final _set = TextEditingController();
+  String _source = 'production'; // production | purchase
   bool _busy = false;
 
   @override
   void dispose() {
     _add.dispose();
+    _return.dispose();
     _set.dispose();
     super.dispose();
   }
@@ -37,6 +41,7 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
     try {
       await action();
       _add.clear();
+      _return.clear();
       _set.clear();
     } catch (e) {
       if (mounted) {
@@ -51,14 +56,13 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final rm = ref.watch(rawMaterialsProvider).maybeWhen(
-          data: (list) => list.firstWhere((m) => m.id == widget.material.id,
-              orElse: () => widget.material),
-          orElse: () => widget.material,
-        );
+    // Keep the sheet live as stock changes.
+    final all = ref.watch(rawVariantsProvider).valueOrNull ?? const [];
+    final v = all.firstWhere((x) => x.id == widget.variant.id,
+        orElse: () => widget.variant);
     final uid = ref.read(currentUserProvider).valueOrNull?.uid;
     final repo = ref.read(rawMaterialRepositoryProvider);
-    final txns = ref.watch(rawMaterialTxnsProvider(rm.id)).valueOrNull ?? const [];
+    final txns = ref.watch(rawVariantTxnsProvider(v.id)).valueOrNull ?? const [];
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
 
     return Padding(
@@ -72,7 +76,7 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
             Text('Manage stock',
                 style: theme.textTheme.titleMedium
                     ?.copyWith(fontWeight: FontWeight.w700)),
-            Text(rm.name,
+            Text(v.label,
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(height: AppSpacing.md),
@@ -85,14 +89,29 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
               ),
               child: Row(
                 children: [
-                  Text('Current stock',
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Current stock',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant)),
+                      if (v.isOutOfStock)
+                        Text('Out of stock',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.error,
+                                fontWeight: FontWeight.w700))
+                      else if (v.isLowStock)
+                        Text('Low stock',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                                color: const Color(0xFFB45309),
+                                fontWeight: FontWeight.w700)),
+                    ],
+                  ),
                   const Spacer(),
-                  Text('${RawMaterial.fmt(rm.currentStock)} ${rm.unit}',
+                  Text('${fmtQty(v.currentStock)} ${v.unit}',
                       style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: rm.isLowStock
+                          color: v.isOutOfStock || v.isLowStock
                               ? theme.colorScheme.error
                               : theme.colorScheme.primary)),
                 ],
@@ -100,30 +119,73 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
             ),
             const SizedBox(height: AppSpacing.lg),
 
-            // Add stock
+            // Add stock — from production or purchase.
+            Text('Add stock',
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: AppSpacing.xs),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                    value: 'production',
+                    label: Text('Production'),
+                    icon: Icon(Icons.precision_manufacturing_outlined)),
+                ButtonSegment(
+                    value: 'purchase',
+                    label: Text('Purchase'),
+                    icon: Icon(Icons.shopping_cart_outlined)),
+              ],
+              selected: {_source},
+              onSelectionChanged: (s) => setState(() => _source = s.first),
+            ),
+            const SizedBox(height: AppSpacing.sm),
             _row(
               controller: _add,
-              label: 'Add stock',
-              unit: rm.unit,
+              label: _source == 'production'
+                  ? 'Quantity produced'
+                  : 'Quantity purchased',
+              unit: v.unit,
               actionLabel: 'Add',
               onAction: () {
-                final v = double.tryParse(_add.text.trim());
-                if (v == null || v <= 0) return;
-                _run(() => repo.addStock(rm, v, createdBy: uid));
+                final n = double.tryParse(_add.text.trim());
+                if (n == null || n <= 0) return;
+                _run(() =>
+                    repo.addVariantStock(v, n, type: _source, createdBy: uid));
               },
             ),
-            const SizedBox(height: AppSpacing.md),
-            // Set exact stock
+
+            const SizedBox(height: AppSpacing.lg),
+            // Return / reduce stock — subtracts.
+            Text('Return stock',
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: AppSpacing.xs),
+            _row(
+              controller: _return,
+              label: 'Quantity returned',
+              unit: v.unit,
+              actionLabel: 'Return',
+              filled: false,
+              onAction: () {
+                final n = double.tryParse(_return.text.trim());
+                if (n == null || n <= 0) return;
+                _run(() => repo.addVariantStock(v, -n,
+                    type: 'return', createdBy: uid));
+              },
+            ),
+
+            const SizedBox(height: AppSpacing.lg),
+            // Set exact stock — a manual correction.
             _row(
               controller: _set,
               label: 'Set exact stock',
-              unit: rm.unit,
+              unit: v.unit,
               actionLabel: 'Set',
               filled: false,
               onAction: () {
-                final v = double.tryParse(_set.text.trim());
-                if (v == null) return;
-                _run(() => repo.setStock(rm, v, createdBy: uid));
+                final n = double.tryParse(_set.text.trim());
+                if (n == null) return;
+                _run(() => repo.setVariantStock(v, n, createdBy: uid));
               },
             ),
 
@@ -153,7 +215,7 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
                           style: theme.textTheme.bodySmall,
                         ),
                       ),
-                      Text('${up ? '+' : ''}${RawMaterial.fmt(t.quantity)} ${rm.unit}',
+                      Text('${up ? '+' : ''}${fmtQty(t.quantity)} ${v.unit}',
                           style: theme.textTheme.bodyMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                               color: up
@@ -176,6 +238,9 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
 
   String _typeLabel(String t) => switch (t) {
         'opening' => 'Opening stock',
+        'production' => 'Produced',
+        'purchase' => 'Purchased',
+        'return' => 'Returned',
         'add' => 'Stock added',
         'adjust' => 'Stock adjusted',
         _ => t,
@@ -209,7 +274,8 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
         ),
         const SizedBox(width: AppSpacing.sm),
         filled
-            ? FilledButton(onPressed: _busy ? null : onAction, child: Text(actionLabel))
+            ? FilledButton(
+                onPressed: _busy ? null : onAction, child: Text(actionLabel))
             : OutlinedButton(
                 onPressed: _busy ? null : onAction, child: Text(actionLabel)),
       ],

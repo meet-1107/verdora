@@ -8,13 +8,14 @@ import '../../../core/widgets/app_image.dart';
 import '../../../core/widgets/state_views.dart';
 import '../data/raw_material_repository.dart';
 import '../domain/raw_material.dart';
+import '../domain/raw_material_variant.dart';
 import 'raw_material_form_screen.dart';
 import 'raw_material_providers.dart';
-import 'raw_material_stock_sheet.dart';
+import 'raw_material_variants_screen.dart';
 
-/// Admin → Operations → Raw Material. Lists raw materials with their unit and
-/// live stock; a persistent button below adds a new one, and each card manages
-/// its stock / edit / delete.
+/// Admin → Operations → Raw Material. Lists raw materials; each shows how many
+/// variants it has. A persistent button below adds a new material, and tapping a
+/// material drills into its variants (sizes / specs) to manage stock.
 class RawMaterialsScreen extends ConsumerStatefulWidget {
   const RawMaterialsScreen({super.key});
 
@@ -37,13 +38,9 @@ class _RawMaterialsScreenState extends ConsumerState<RawMaterialsScreen> {
         builder: (_) => RawMaterialFormScreen(existing: existing)));
   }
 
-  void _manageStock(RawMaterial m) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => RawMaterialStockSheet(material: m),
-    );
+  void _openVariants(RawMaterial m) {
+    Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => RawMaterialVariantsScreen(materialId: m.id)));
   }
 
   Future<void> _delete(RawMaterial m) async {
@@ -51,7 +48,8 @@ class _RawMaterialsScreenState extends ConsumerState<RawMaterialsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete raw material'),
-        content: Text('Delete "${m.name}"? This cannot be undone.'),
+        content: Text(
+            'Delete "${m.name}" and all of its variants? This cannot be undone.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -66,7 +64,7 @@ class _RawMaterialsScreenState extends ConsumerState<RawMaterialsScreen> {
     );
     if (ok != true) return;
     try {
-      await ref.read(rawMaterialRepositoryProvider).delete(m.id);
+      await ref.read(rawMaterialRepositoryProvider).deleteMaterial(m.id);
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Raw material deleted.')));
@@ -135,11 +133,11 @@ class _RawMaterialsScreenState extends ConsumerState<RawMaterialsScreen> {
                                 const SizedBox(height: AppSpacing.sm),
                             itemBuilder: (_, i) => _RawCard(
                               m: list[i],
-                              onTap: () => _manageStock(list[i]),
+                              variants:
+                                  ref.watch(variantsOfProvider(list[i].id)),
+                              onTap: () => _openVariants(list[i]),
                               onSelect: (a) {
                                 switch (a) {
-                                  case 'stock':
-                                    _manageStock(list[i]);
                                   case 'edit':
                                     _openForm(existing: list[i]);
                                   case 'delete':
@@ -176,8 +174,12 @@ class _RawMaterialsScreenState extends ConsumerState<RawMaterialsScreen> {
 
 class _RawCard extends StatelessWidget {
   const _RawCard(
-      {required this.m, required this.onTap, required this.onSelect});
+      {required this.m,
+      required this.variants,
+      required this.onTap,
+      required this.onSelect});
   final RawMaterial m;
+  final List<RawMaterialVariant> variants;
   final VoidCallback onTap;
   final ValueChanged<String> onSelect;
 
@@ -186,6 +188,11 @@ class _RawCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final img = appImageProvider(m.imageUrl);
+    final outCount = variants.where((v) => v.isOutOfStock).length;
+    final lowCount = variants.where((v) => v.isLowStock).length;
+    final subtitle = variants.isEmpty
+        ? 'No variants yet — tap to add'
+        : '${variants.length} variant${variants.length == 1 ? '' : 's'}';
     return Card(
       margin: EdgeInsets.zero,
       child: InkWell(
@@ -221,29 +228,28 @@ class _RawCard extends StatelessWidget {
                         style: theme.textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
-                    Text('${m.unitType} · measured in ${m.unit}',
+                    Text(subtitle,
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: scheme.onSurfaceVariant)),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        _pill(
-                          'Stock: ${RawMaterial.fmt(m.currentStock)} ${m.unit}',
-                          m.isLowStock ? AppColors.error : scheme.primary,
-                        ),
-                        if (m.isLowStock) ...[
-                          const SizedBox(width: 6),
-                          _pill('Low', AppColors.warning),
+                    if (outCount > 0 || lowCount > 0) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        children: [
+                          if (outCount > 0)
+                            _pill('$outCount out of stock', AppColors.error),
+                          if (lowCount > 0)
+                            _pill('$lowCount low', AppColors.warning),
                         ],
-                      ],
-                    ),
+                      ),
+                    ],
                   ],
                 ),
               ),
+              const Icon(Icons.chevron_right),
               PopupMenuButton<String>(
                 onSelected: onSelect,
                 itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'stock', child: Text('Update stock')),
                   PopupMenuItem(value: 'edit', child: Text('Edit')),
                   PopupMenuItem(
                       value: 'delete',
