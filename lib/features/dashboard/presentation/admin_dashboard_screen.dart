@@ -15,6 +15,7 @@ import '../../notifications/presentation/notifications_screen.dart';
 import '../../orders/domain/order.dart';
 import '../../orders/domain/order_status.dart';
 import '../../orders/presentation/order_providers.dart';
+import '../../raw_materials/presentation/raw_material_providers.dart';
 
 /// Admin command center: what needs doing now (work queue) first, then today's
 /// business numbers, then a lightweight status breakdown. UI only — every value
@@ -105,6 +106,9 @@ class _DashboardBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final lowStock = ref.watch(lowStockVariantsProvider).length;
+    final rawLowStock = (ref.watch(rawVariantsProvider).valueOrNull ?? const [])
+        .where((v) => v.isLowStock || v.isOutOfStock)
+        .length;
 
     final pending = _count(OrderStatus.pending);
     // "Packing" = approved-awaiting-pack + actively packing.
@@ -164,12 +168,20 @@ class _DashboardBody extends ConsumerWidget {
               onTap: () => context.go('/admin/orders'),
             ),
             _ActionCardData(
-              label: 'Low stock',
+              label: 'Product low stock',
               count: lowStock,
               icon: Icons.warning_amber_outlined,
               color: AppColors.error,
               actionLabel: 'Manage',
               onTap: () => context.go('/admin/inventory'),
+            ),
+            _ActionCardData(
+              label: 'Raw material low stock',
+              count: rawLowStock,
+              icon: Icons.science_outlined,
+              color: AppColors.warning,
+              actionLabel: 'Manage',
+              onTap: () => context.go('/admin/raw-materials'),
             ),
           ],
         ),
