@@ -34,6 +34,8 @@ class _RawMaterialVariantFormScreenState
   late final TextEditingController _opening;
   late final TextEditingController _minStock;
   final List<_Attr> _attrs = [];
+  String? _unitType; // resolved in build once the material is known
+  String? _unit;
   bool _saving = false;
 
   bool get _isEdit => widget.existing != null;
@@ -46,7 +48,11 @@ class _RawMaterialVariantFormScreenState
     _opening = TextEditingController();
     _minStock =
         TextEditingController(text: e == null ? '' : fmtQty(e.minStock));
+    // Seed the unit from an existing variant; a new variant seeds from the
+    // parent material in build() (once it has streamed in).
     if (e != null) {
+      _unitType = e.unitType;
+      _unit = e.unit;
       for (final entry in e.attributes.entries) {
         _attrs.add(_Attr(entry.key, entry.value));
       }
@@ -68,9 +74,10 @@ class _RawMaterialVariantFormScreenState
     if (!_formKey.currentState!.validate()) return;
     final user = ref.read(currentUserProvider).valueOrNull;
     if (user == null) return;
-    // Inherit the unit from the parent material.
-    final unitType = material?.unitType ?? widget.existing?.unitType ?? 'Pieces';
-    final unit = material?.unit ?? widget.existing?.unit ?? 'pcs';
+    // Each variant carries its own unit (defaulted from the material).
+    final unitType =
+        _unitType ?? material?.unitType ?? widget.existing?.unitType ?? 'Pieces';
+    final unit = _unit ?? material?.unit ?? widget.existing?.unit ?? 'pcs';
     setState(() => _saving = true);
     try {
       final repo = ref.read(rawMaterialRepositoryProvider);
@@ -131,7 +138,14 @@ class _RawMaterialVariantFormScreenState
     final materials = ref.watch(rawMaterialsProvider).valueOrNull ?? const [];
     final material =
         materials.where((m) => m.id == widget.rawMaterialId).firstOrNull;
-    final unit = material?.unit ?? widget.existing?.unit ?? 'pcs';
+
+    // Seed the unit from the parent material the first time it's available.
+    _unitType ??= material?.unitType ?? rawMaterialUnitTypes.keys.first;
+    final units = rawMaterialUnitTypes[_unitType] ??
+        rawMaterialUnitTypes.values.first;
+    _unit ??= material?.unit ?? units.first;
+    if (!units.contains(_unit)) _unit = units.first;
+    final unit = _unit!;
 
     return Scaffold(
       appBar: AppBar(title: Text(_isEdit ? 'Edit variant' : 'Add variant')),
@@ -143,15 +157,52 @@ class _RawMaterialVariantFormScreenState
             TextFormField(
               controller: _label,
               textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Variant / size',
                 hintText: 'e.g. 1/2 inch',
-                helperText: 'Measured in ${material?.unit ?? unit}'
-                    ' (from the material)',
               ),
               validator: (v) => (v == null || v.trim().isEmpty)
                   ? 'Enter a variant name / size'
                   : null,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
+            // Per-variant unit type → unit (can differ from other variants).
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _unitType,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Unit type'),
+                    items: rawMaterialUnitTypes.keys
+                        .map((t) =>
+                            DropdownMenuItem(value: t, child: Text(t)))
+                        .toList(),
+                    onChanged: (t) {
+                      if (t == null) return;
+                      setState(() {
+                        _unitType = t;
+                        _unit = rawMaterialUnitTypes[t]!.first;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: unit,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Unit'),
+                    items: units
+                        .map((u) =>
+                            DropdownMenuItem(value: u, child: Text(u)))
+                        .toList(),
+                    onChanged: (u) =>
+                        setState(() => _unit = u ?? units.first),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.lg),
 
