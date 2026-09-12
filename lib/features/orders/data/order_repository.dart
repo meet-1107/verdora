@@ -147,6 +147,163 @@ class OrderRepository {
       _deductStockAndSetStatus(order, OrderStatus.dispatched,
           createdBy: createdBy, reason: 'dispatch');
 
+  /// Dispatches only the quantities in [dispatchByItem] (itemId → qty to send
+  /// now). Any shortfall (ordered − dispatched, per line) is split off into a
+  /// NEW approved order — a "backorder" — linked to this order, so the missing
+  /// pieces are remembered and fulfilled later. The original order is reduced to
+  /// the dispatched quantities and marked dispatched (stock deducted for those).
+  ///
+  /// Returns the backorder's ids, or null when nothing was short (a normal full
+  /// dispatch).
+  Future<({String id, String orderNo})?> dispatchWithBackorder({
+    required Order order,
+    required Map<String, int> dispatchByItem,
+    String? createdBy,
+  }) async {
+    final itemsSnap =
+        await _orderItems.where('orderId', isEqualTo: order.id).get();
+    final items =
+        itemsSnap.docs.map((d) => OrderItem.fromMap(d.id, d.data())).toList();
+
+    // Split each line into dispatched-now and short quantities.
+    final shortItems = <OrderItem>[];
+    var anyDispatched = false;
+    for (final it in items) {
+      final raw = dispatchByItem[it.id] ?? it.quantity;
+      final send = raw < 0 ? 0 : (raw > it.quantity ? it.quantity : raw);
+      final short = it.quantity - send;
+      if (send > 0) anyDispatched = true;
+      if (short > 0) {
+        shortItems.add(OrderItem(
+          id: '',
+          companyId: it.companyId,
+          orderId: '',
+          variantId: it.variantId,
+          productName: it.productName,
+          variantLabel: it.variantLabel,
+          rate: it.rate,
+          quantity: short,
+          discountPercent: it.discountPercent,
+          taxPercent: it.taxPercent,
+        ));
+      }
+    }
+
+    if (!anyDispatched) {
+      throw Exception('Nothing to dispatch — set a quantity for at least one '
+          'line.');
+    }
+
+    // No shortage → ordinary full dispatch.
+    if (shortItems.isEmpty) {
+      await markDispatched(order, createdBy: createdBy);
+      return null;
+    }
+
+    // 1) Create the backorder (approved, ready to pack) with the short lines.
+    final backTotals = _totalsFor(shortItems, order.globalDiscountPercent);
+    final backHeader = Order(
+      id: '',
+      companyId: order.companyId,
+      partyId: order.partyId,
+      partyName: order.partyName,
+      partyCode: order.partyCode,
+      status: OrderStatus.approved,
+      globalDiscountPercent: order.globalDiscountPercent,
+      subtotal: backTotals.subtotal,
+      discountTotal: backTotals.discountTotal,
+      taxTotal: backTotals.taxTotal,
+      grandTotal: backTotals.grandTotal,
+      itemCount: shortItems.length,
+      note: 'Backorder of ${order.orderNo ?? order.displayId}',
+      placedByAdmin: order.placedByAdmin,
+      createdByUid: order.createdByUid,
+      backorderOf: order.id,
+      backorderOfNo: order.orderNo,
+    );
+    final back = await createOrder(
+      order: backHeader,
+      items: shortItems,
+      clientCode: order.partyCode ?? order.partyName,
+    );
+    // Give the backorder its own invoice number + approval timestamp.
+    await _orders.doc(back.id).update({
+      'invoiceNo': _invoiceNumber(back.id),
+      'approvedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 2) Reduce the original order to the dispatched quantities.
+    final batch = _db.batch();
+    final dispatched = <OrderItem>[];
+    for (final it in items) {
+      final raw = dispatchByItem[it.id] ?? it.quantity;
+      final send = raw < 0 ? 0 : (raw > it.quantity ? it.quantity : raw);
+      if (send <= 0) {
+        batch.delete(_orderItems.doc(it.id)); // fully backordered
+        continue;
+      }
+      dispatched.add(OrderItem(
+        id: it.id,
+        companyId: it.companyId,
+        orderId: it.orderId,
+        variantId: it.variantId,
+        productName: it.productName,
+        variantLabel: it.variantLabel,
+        rate: it.rate,
+        quantity: send,
+        discountPercent: it.discountPercent,
+        taxPercent: it.taxPercent,
+        picked: it.picked,
+      ));
+      if (send != it.quantity) {
+        batch.update(_orderItems.doc(it.id),
+            {'quantity': send, 'total': it.rate * send * (1 - it.discountPercent / 100)});
+      }
+    }
+    final totals = _totalsFor(dispatched, order.globalDiscountPercent);
+    batch.update(_orders.doc(order.id), {
+      'subtotal': totals.subtotal,
+      'discountTotal': totals.discountTotal,
+      'taxTotal': totals.taxTotal,
+      'grandTotal': totals.grandTotal,
+      'itemCount': dispatched.length,
+      'modified': true,
+      'backorderId': back.id,
+      'backorderNo': back.orderNo,
+      'statusNote': '${shortItems.length} item(s) short — moved to '
+          '${back.orderNo}',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+
+    // 3) Dispatch the original (deducts stock + raw materials for the sent qty).
+    await markDispatched(order, createdBy: createdBy);
+    return back;
+  }
+
+  /// Two-stage totals for a set of lines: per-line product discount, then the
+  /// order-level global %, then GST — mirroring [updateItemQuantity].
+  ({double subtotal, double discountTotal, double taxTotal, double grandTotal})
+      _totalsFor(List<OrderItem> lines, double globalPct) {
+    var subtotal = 0.0, productDiscount = 0.0, afterProduct = 0.0;
+    for (final it in lines) {
+      final gross = it.rate * it.quantity;
+      final discAmt = gross * it.discountPercent / 100;
+      subtotal += gross;
+      productDiscount += discAmt;
+      afterProduct += gross - discAmt;
+    }
+    final globalDiscount = afterProduct * globalPct / 100;
+    final taxable = afterProduct - globalDiscount;
+    final tax = taxable * AppConstants.gstRate / 100;
+    return (
+      subtotal: subtotal,
+      discountTotal: productDiscount + globalDiscount,
+      taxTotal: tax,
+      grandTotal: taxable + tax,
+    );
+  }
+
   /// Sets [status] and, the first time only, deducts every line's quantity from
   /// stock in one atomic batch (variant cache + an `order` inventory
   /// transaction per line). Re-entrant: if [Order.stockDeducted] is already

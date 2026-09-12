@@ -63,8 +63,11 @@ service cloud.firestore {
     // ---- orders --------------------------------------------------------
     match /orders/{id} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn()
-        && request.resource.data.status in ['draft', 'pending'];
+      // Clients create draft/pending orders; admins may also create advanced
+      // states (e.g. an approved "backorder" split off during dispatch).
+      allow create: if isAdmin()
+        || (isSignedIn()
+            && request.resource.data.status in ['draft', 'pending']);
       // Admin edits anything; a client may edit their OWN order only while it is
       // still pending (e.g. deleting a line recomputes totals before approval).
       allow update: if isAdmin()

@@ -29,6 +29,10 @@ class Order {
     this.stockDeducted = false,
     this.placedByAdmin = false,
     this.createdByUid,
+    this.backorderOf,
+    this.backorderOfNo,
+    this.backorderId,
+    this.backorderNo,
   });
 
   final String id;
@@ -74,6 +78,16 @@ class Order {
   final bool placedByAdmin;
   final String? createdByUid;
 
+  /// If this order was created to hold the short (undispatched) items of another
+  /// order, these point back to that original order. [backorderId]/[backorderNo]
+  /// (set on the ORIGINAL) point forward to the backorder that was split off.
+  final String? backorderOf;
+  final String? backorderOfNo;
+  final String? backorderId;
+  final String? backorderNo;
+
+  bool get isBackorder => backorderOf != null;
+
   /// The best human-facing identifier to show for this order.
   String get displayId => orderNo ?? invoiceNo ?? 'Order';
 
@@ -103,6 +117,10 @@ class Order {
       stockDeducted: map['stockDeducted'] as bool? ?? false,
       placedByAdmin: map['placedByAdmin'] as bool? ?? false,
       createdByUid: map['createdByUid'] as String?,
+      backorderOf: map['backorderOf'] as String?,
+      backorderOfNo: map['backorderOfNo'] as String?,
+      backorderId: map['backorderId'] as String?,
+      backorderNo: map['backorderNo'] as String?,
     );
   }
 
@@ -124,6 +142,8 @@ class Order {
         'modified': modified,
         'placedByAdmin': placedByAdmin,
         'createdByUid': createdByUid,
+        'backorderOf': backorderOf,
+        'backorderOfNo': backorderOfNo,
         'createdAt': FieldValue.serverTimestamp(),
       };
 }
