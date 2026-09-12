@@ -442,11 +442,40 @@ class _OrderCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    AppStatusChip(
-                        label: order.status.label,
-                        statusValue: order.status.value),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        AppStatusChip(
+                            label: order.status.label,
+                            statusValue: order.status.value),
+                        if (order.isBackorder) ...[
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B)
+                                  .withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text('Backorder',
+                                style: TextStyle(
+                                    color: Color(0xFFB45309),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 10)),
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
+                if (order.isBackorder && order.backorderOfNo != null) ...[
+                  const SizedBox(height: 6),
+                  Text('From short order ${order.backorderOfNo}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFFB45309),
+                          fontWeight: FontWeight.w600)),
+                ],
                 const SizedBox(height: AppSpacing.md),
                 Row(
                   children: [
