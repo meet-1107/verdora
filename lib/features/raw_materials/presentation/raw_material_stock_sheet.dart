@@ -241,6 +241,7 @@ class _RawMaterialStockSheetState extends ConsumerState<RawMaterialStockSheet> {
         'production' => 'Produced',
         'purchase' => 'Purchased',
         'return' => 'Returned',
+        'consume' => 'Consumed (order)',
         'add' => 'Stock added',
         'adjust' => 'Stock adjusted',
         _ => t,

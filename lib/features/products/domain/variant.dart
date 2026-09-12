@@ -1,3 +1,19 @@
+/// One line of a variant's bill of materials: how much of a given raw-material
+/// variant is consumed to make a single unit of the product variant. [qty] is in
+/// the raw-material variant's own unit (kg, meter, pcs…).
+class BomLine {
+  const BomLine({required this.rawVariantId, required this.qty});
+  final String rawVariantId;
+  final double qty;
+
+  factory BomLine.fromMap(Map<String, dynamic> m) => BomLine(
+        rawVariantId: m['rawVariantId'] as String? ?? '',
+        qty: (m['qty'] as num?)?.toDouble() ?? 0,
+      );
+
+  Map<String, dynamic> toMap() => {'rawVariantId': rawVariantId, 'qty': qty};
+}
+
 /// A sellable variant of a product (`variants/{id}`), e.g. "20 mm".
 ///
 /// [currentStock] is a CACHE maintained by inventory transactions — it is never
@@ -18,6 +34,7 @@ class Variant {
     this.minStock = 0,
     this.maxStock = 0,
     this.status = 'active',
+    this.bom = const [],
   });
 
   final String id;
@@ -35,6 +52,10 @@ class Variant {
   final int minStock;
   final int maxStock;
   final String status;
+
+  /// Raw materials consumed per unit produced. Deducted from raw-material stock
+  /// when this variant's stock is deducted (e.g. on dispatch).
+  final List<BomLine> bom;
 
   bool get isLowStock => currentStock <= minStock;
 
@@ -59,6 +80,12 @@ class Variant {
       minStock: (map['minStock'] as num?)?.toInt() ?? 0,
       maxStock: (map['maxStock'] as num?)?.toInt() ?? 0,
       status: map['status'] as String? ?? 'active',
+      bom: (map['bom'] as List?)
+              ?.whereType<Map>()
+              .map((e) => BomLine.fromMap(e.cast<String, dynamic>()))
+              .where((b) => b.rawVariantId.isNotEmpty && b.qty > 0)
+              .toList() ??
+          const [],
     );
   }
 
@@ -75,5 +102,6 @@ class Variant {
         'minStock': minStock,
         'maxStock': maxStock,
         'status': status,
+        'bom': bom.map((b) => b.toMap()).toList(),
       };
 }

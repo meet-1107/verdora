@@ -176,6 +176,7 @@ class OrderRepository {
     }
 
     final batch = _db.batch();
+    final rawDelta = <String, double>{};
     for (final entry in qtyByVariant.entries) {
       final ref = _db.collection(Collections.variants).doc(entry.key);
       final snap = await ref.get();
@@ -185,6 +186,9 @@ class OrderRepository {
       final newStock = (current - entry.value) < 0 ? 0 : current - entry.value;
       final applied = current - newStock; // pieces actually removed (>= 0)
       if (applied <= 0) continue;
+
+      // Consume this variant's raw materials for the pieces actually removed.
+      _accumulateBom(snap.data(), applied, rawDelta);
 
       batch.update(ref, {'currentStock': newStock});
       batch.set(
@@ -204,6 +208,12 @@ class OrderRepository {
       );
     }
 
+    await _applyRawConsumption(batch, order.companyId, rawDelta,
+        reason: 'Consumed on $reason'
+            '${order.invoiceNo != null ? ' (${order.invoiceNo})' : ''}',
+        refId: order.id,
+        createdBy: createdBy);
+
     batch.update(_orders.doc(order.id), {
       'status': status.value,
       'stockDeducted': true,
@@ -211,6 +221,69 @@ class OrderRepository {
     });
 
     await batch.commit();
+  }
+
+  /// Accumulates raw-material consumption for a product variant into [rawDelta]
+  /// (keyed by raw-material variant id; negative = consume, positive = restore).
+  /// [piecesRemoved] is how many units left product stock (> 0 consumes raw;
+  /// < 0, i.e. a restore, returns raw).
+  void _accumulateBom(Map<String, dynamic>? variantData, int piecesRemoved,
+      Map<String, double> rawDelta) {
+    if (variantData == null || piecesRemoved == 0) return;
+    final bom = variantData['bom'];
+    if (bom is! List) return;
+    for (final e in bom) {
+      if (e is! Map) continue;
+      final id = e['rawVariantId'] as String? ?? '';
+      final qty = (e['qty'] as num?)?.toDouble() ?? 0;
+      if (id.isEmpty || qty <= 0) continue;
+      final delta = -piecesRemoved * qty; // removed → negative (consume)
+      rawDelta.update(id, (v) => v + delta, ifAbsent: () => delta);
+    }
+  }
+
+  /// Applies the accumulated [rawDelta] to `raw_material_variants` stock (clamped
+  /// at zero) and logs one `raw_material_transactions` entry per affected
+  /// variant, all into [batch].
+  Future<void> _applyRawConsumption(
+    WriteBatch batch,
+    String companyId,
+    Map<String, double> rawDelta, {
+    required String reason,
+    String? refId,
+    String? createdBy,
+  }) async {
+    for (final entry in rawDelta.entries) {
+      if (entry.value == 0) continue;
+      final ref =
+          _db.collection(Collections.rawMaterialVariants).doc(entry.key);
+      final snap = await ref.get();
+      if (!snap.exists) continue;
+      final current = (snap.data()?['currentStock'] as num?)?.toDouble() ?? 0;
+      final desired = current + entry.value;
+      final newStock = desired < 0 ? 0.0 : desired;
+      final applied = newStock - current;
+      if (applied == 0) continue;
+      batch.update(ref, {
+        'currentStock': newStock,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      batch.set(
+        _db.collection(Collections.rawMaterialTransactions).doc(),
+        {
+          'companyId': companyId,
+          'rawMaterialId': snap.data()?['rawMaterialId'],
+          'variantId': entry.key,
+          'quantity': applied,
+          'type': 'consume',
+          'note': reason,
+          'refType': 'order',
+          'refId': refId,
+          'createdBy': createdBy,
+          'createdAt': FieldValue.serverTimestamp(),
+        },
+      );
+    }
   }
 
   /// Whether a **client** may still delete an order — only before it is
@@ -257,11 +330,14 @@ class OrderRepository {
         qtyByVariant.update(item.variantId, (v) => v + item.quantity,
             ifAbsent: () => item.quantity);
       }
+      final rawDelta = <String, double>{};
       for (final entry in qtyByVariant.entries) {
         final ref = _db.collection(Collections.variants).doc(entry.key);
         final snap = await ref.get();
         final raw = (snap.data()?['currentStock'] as num?)?.toInt() ?? 0;
         final current = raw < 0 ? 0 : raw; // treat any stray negative as 0
+        // Returning pieces to product stock → return their raw materials too.
+        _accumulateBom(snap.data(), -entry.value, rawDelta);
         batch.update(ref, {'currentStock': current + entry.value});
         batch.set(
           _db.collection(Collections.inventoryTransactions).doc(),
@@ -279,6 +355,11 @@ class OrderRepository {
           },
         );
       }
+      await _applyRawConsumption(batch, companyId, rawDelta,
+          reason: 'Returned on order delete'
+              '${invoiceNo != null ? ' ($invoiceNo)' : ''}',
+          refId: orderId,
+          createdBy: createdBy);
     }
 
     for (final doc in itemsSnap.docs) {
@@ -311,6 +392,7 @@ class OrderRepository {
     final itemsSnap =
         await _orderItems.where('orderId', isEqualTo: orderId).get();
     final batch = _db.batch();
+    final rawDelta = <String, double>{};
 
     // Applies an inventory delta for the edited line (only after stock has been
     // deducted). +pieces added back to stock, −pieces removed. Stock is clamped
@@ -325,6 +407,9 @@ class OrderRepository {
       final newStock = desired < 0 ? 0 : desired;
       final applied = newStock - current; // actual change (>=/<= 0)
       if (applied == 0) return;
+      // Mirror the raw-material movement: stock added back returns raw,
+      // stock removed consumes raw. piecesRemoved = -applied.
+      _accumulateBom(snap.data(), -applied, rawDelta);
       batch.update(ref, {'currentStock': newStock});
       batch.set(
         _db.collection(Collections.inventoryTransactions).doc(),
@@ -375,6 +460,12 @@ class OrderRepository {
     final taxable = afterProduct - globalDiscount;
     final tax = taxable * AppConstants.gstRate / 100;
     final grandTotal = taxable + tax;
+    await _applyRawConsumption(batch, companyId, rawDelta,
+        reason: 'Order edit after packing'
+            '${invoiceNo != null ? ' ($invoiceNo)' : ''}',
+        refId: orderId,
+        createdBy: createdBy);
+
     batch.update(_orders.doc(orderId), {
       'subtotal': subtotal,
       'discountTotal': productDiscount + globalDiscount,
