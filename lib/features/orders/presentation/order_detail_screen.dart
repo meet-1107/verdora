@@ -115,18 +115,19 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
   void _advance(Order o, OrderStatus next) {
     final repo = ref.read(orderRepositoryProvider);
     final logger = ref.read(activityLoggerProvider);
+    // Packing goes through a dialog so the admin can pack only what's available
+    // and split the short items into a pending backorder.
     if (next == OrderStatus.packed) {
-      _act(() async {
-        await repo.markPacked(o, createdBy: _uid);
-        await logger.record('order.packed', target: _label(o));
-        await _notifyStatus(o, OrderStatus.packed);
-      }, 'Marked packed — client notified.');
+      _packSplit(o);
       return;
     }
-    // Stock is deducted when the order is DISPATCHED. Dispatch goes through a
-    // dialog so the admin can send only what's in stock and backorder the rest.
+    // Stock is deducted when the order is DISPATCHED (the packed quantities).
     if (next == OrderStatus.dispatched) {
-      _dispatch(o);
+      _act(() async {
+        await repo.markDispatched(o, createdBy: _uid);
+        await logger.record('order.dispatched', target: _label(o));
+        await _notifyStatus(o, OrderStatus.dispatched);
+      }, 'Dispatched — stock deducted, client notified.');
       return;
     }
     _act(() async {
@@ -136,9 +137,10 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
     }, 'Marked ${next.label} — client notified.');
   }
 
-  /// Opens the dispatch dialog: the admin sets how much of each line to send now
-  /// (defaulting to what's in stock); any shortfall is split into a backorder.
-  Future<void> _dispatch(Order o) async {
+  /// Opens the packing dialog: the admin sets how much of each line to pack now
+  /// (defaulting to what's in stock); any shortfall is split into a PENDING
+  /// backorder, and the packed items move on to dispatch.
+  Future<void> _packSplit(Order o) async {
     final items = ref.read(orderItemsProvider(o.id)).valueOrNull ?? const [];
     if (items.isEmpty) return;
     final stockByVariant = <String, int>{
@@ -156,21 +158,20 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen>
     final repo = ref.read(orderRepositoryProvider);
     final logger = ref.read(activityLoggerProvider);
     await _act(() async {
-      final back =
-          await repo.dispatchWithBackorder(order: o, dispatchByItem: result);
-      await logger.record('order.dispatched', target: _label(o));
-      await _notifyStatus(o, OrderStatus.dispatched);
+      final back = await repo.packWithBackorder(order: o, packByItem: result);
+      await logger.record('order.packed', target: _label(o));
+      await _notifyStatus(o, OrderStatus.packed);
       if (back != null) {
         await ref.read(notificationRepositoryProvider).notifyParty(
               companyId: o.companyId,
               partyId: o.partyId,
               title: 'Some items backordered',
               body: 'A few items of order ${o.displayId} were short and moved '
-                  'to a new order ${back.orderNo}. We will dispatch them once '
-                  'back in stock.',
+                  'to a new pending order ${back.orderNo}. They will be sent '
+                  'once back in stock.',
             );
       }
-    }, 'Dispatched — stock deducted, client notified.');
+    }, 'Packed — short items moved to a pending backorder.');
   }
 
   /// Sends the dealer an in-app notification describing a status change. Approve
@@ -684,17 +685,19 @@ class _HeroCard extends StatelessWidget {
                     _actionButton(context, next),
               ],
             ),
-            if (order.status == OrderStatus.packing && !pickComplete) ...[
+            if (order.status == OrderStatus.packing) ...[
               const SizedBox(height: AppSpacing.sm),
               Row(
                 children: [
-                  Icon(Icons.info_outline, size: 15, color: scheme.error),
+                  Icon(Icons.info_outline,
+                      size: 15, color: scheme.onSurfaceVariant),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                        'Pick all variants (Products tab) to enable Mark Packed.',
+                        'Mark Packed lets you pack the available quantity; short '
+                        'items move to a pending backorder.',
                         style: theme.textTheme.bodySmall
-                            ?.copyWith(color: scheme.error)),
+                            ?.copyWith(color: scheme.onSurfaceVariant)),
                   ),
                 ],
               ),
@@ -742,12 +745,11 @@ class _HeroCard extends StatelessWidget {
           label: const Text('Cancel'),
         );
       case OrderStatus.packed:
-        // Block "Mark Packed" until every warehouse line is picked.
-        final blocked = order.status == OrderStatus.packing && !pickComplete;
+        // Packing opens a dialog to choose the available quantity per line, so
+        // it's always available (the dialog handles short items → backorder).
         return FilledButton.tonalIcon(
-          onPressed: blocked ? null : () => onAdvance(next),
-          icon: Icon(blocked ? Icons.lock_outline : Icons.arrow_forward,
-              size: 18),
+          onPressed: () => onAdvance(next),
+          icon: const Icon(Icons.inventory_2_outlined, size: 18),
           label: const Text('Mark Packed'),
         );
       default:
@@ -2229,7 +2231,7 @@ class _DispatchDialogState extends State<_DispatchDialog> {
         widget.items.where((it) => _send(it) < it.quantity).length;
 
     return AlertDialog(
-      title: const Text('Dispatch order'),
+      title: const Text('Pack order'),
       content: SizedBox(
         width: (MediaQuery.sizeOf(context).width - 80).clamp(280.0, 460.0),
         child: Column(
@@ -2237,8 +2239,8 @@ class _DispatchDialogState extends State<_DispatchDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Set how many of each item to dispatch now. Short items are moved '
-              'to a new linked backorder.',
+              'Set how many of each item to pack now. Short items move to a new '
+              'pending backorder.',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: scheme.onSurfaceVariant),
             ),
@@ -2291,7 +2293,7 @@ class _DispatchDialogState extends State<_DispatchDialog> {
                           ],
                           onChanged: (_) => setState(() {}),
                           decoration: const InputDecoration(
-                              isDense: true, labelText: 'Send'),
+                              isDense: true, labelText: 'Pack'),
                         ),
                       ),
                     ],
@@ -2327,7 +2329,7 @@ class _DispatchDialogState extends State<_DispatchDialog> {
             Navigator.pop(context,
                 {for (final it in widget.items) it.id: _send(it)});
           },
-          child: const Text('Dispatch'),
+          child: const Text('Pack'),
         ),
       ],
     );

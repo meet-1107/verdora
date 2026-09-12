@@ -147,17 +147,18 @@ class OrderRepository {
       _deductStockAndSetStatus(order, OrderStatus.dispatched,
           createdBy: createdBy, reason: 'dispatch');
 
-  /// Dispatches only the quantities in [dispatchByItem] (itemId → qty to send
-  /// now). Any shortfall (ordered − dispatched, per line) is split off into a
-  /// NEW approved order — a "backorder" — linked to this order, so the missing
-  /// pieces are remembered and fulfilled later. The original order is reduced to
-  /// the dispatched quantities and marked dispatched (stock deducted for those).
+  /// Packs only the quantities in [packByItem] (itemId → qty to pack now). Any
+  /// shortfall (ordered − packed, per line) is split off into a NEW **pending**
+  /// order — a "backorder" — linked to this order, so the missing pieces are
+  /// remembered and (after re-approval) fulfilled later. The original order is
+  /// reduced to the packed quantities and marked **packed**. Stock is NOT touched
+  /// here — it is deducted on dispatch as usual.
   ///
   /// Returns the backorder's ids, or null when nothing was short (a normal full
-  /// dispatch).
-  Future<({String id, String orderNo})?> dispatchWithBackorder({
+  /// pack).
+  Future<({String id, String orderNo})?> packWithBackorder({
     required Order order,
-    required Map<String, int> dispatchByItem,
+    required Map<String, int> packByItem,
     String? createdBy,
   }) async {
     final itemsSnap =
@@ -165,14 +166,14 @@ class OrderRepository {
     final items =
         itemsSnap.docs.map((d) => OrderItem.fromMap(d.id, d.data())).toList();
 
-    // Split each line into dispatched-now and short quantities.
+    // Split each line into packed-now and short quantities.
     final shortItems = <OrderItem>[];
-    var anyDispatched = false;
+    var anyPacked = false;
     for (final it in items) {
-      final raw = dispatchByItem[it.id] ?? it.quantity;
-      final send = raw < 0 ? 0 : (raw > it.quantity ? it.quantity : raw);
-      final short = it.quantity - send;
-      if (send > 0) anyDispatched = true;
+      final raw = packByItem[it.id] ?? it.quantity;
+      final take = raw < 0 ? 0 : (raw > it.quantity ? it.quantity : raw);
+      final short = it.quantity - take;
+      if (take > 0) anyPacked = true;
       if (short > 0) {
         shortItems.add(OrderItem(
           id: '',
@@ -189,18 +190,17 @@ class OrderRepository {
       }
     }
 
-    if (!anyDispatched) {
-      throw Exception('Nothing to dispatch — set a quantity for at least one '
-          'line.');
+    if (!anyPacked) {
+      throw Exception('Nothing to pack — set a quantity for at least one line.');
     }
 
-    // No shortage → ordinary full dispatch.
+    // No shortage → ordinary full pack.
     if (shortItems.isEmpty) {
-      await markDispatched(order, createdBy: createdBy);
+      await markPacked(order, createdBy: createdBy);
       return null;
     }
 
-    // 1) Create the backorder (approved, ready to pack) with the short lines.
+    // 1) Create the backorder as a PENDING order with the short lines.
     final backTotals = _totalsFor(shortItems, order.globalDiscountPercent);
     final backHeader = Order(
       id: '',
@@ -208,7 +208,7 @@ class OrderRepository {
       partyId: order.partyId,
       partyName: order.partyName,
       partyCode: order.partyCode,
-      status: OrderStatus.approved,
+      status: OrderStatus.pending,
       globalDiscountPercent: order.globalDiscountPercent,
       subtotal: backTotals.subtotal,
       discountTotal: backTotals.discountTotal,
@@ -226,23 +226,18 @@ class OrderRepository {
       items: shortItems,
       clientCode: order.partyCode ?? order.partyName,
     );
-    // Give the backorder its own invoice number + approval timestamp.
-    await _orders.doc(back.id).update({
-      'invoiceNo': _invoiceNumber(back.id),
-      'approvedAt': FieldValue.serverTimestamp(),
-    });
 
-    // 2) Reduce the original order to the dispatched quantities.
+    // 2) Reduce the original order to the packed quantities and mark it packed.
     final batch = _db.batch();
-    final dispatched = <OrderItem>[];
+    final packed = <OrderItem>[];
     for (final it in items) {
-      final raw = dispatchByItem[it.id] ?? it.quantity;
-      final send = raw < 0 ? 0 : (raw > it.quantity ? it.quantity : raw);
-      if (send <= 0) {
+      final raw = packByItem[it.id] ?? it.quantity;
+      final take = raw < 0 ? 0 : (raw > it.quantity ? it.quantity : raw);
+      if (take <= 0) {
         batch.delete(_orderItems.doc(it.id)); // fully backordered
         continue;
       }
-      dispatched.add(OrderItem(
+      packed.add(OrderItem(
         id: it.id,
         companyId: it.companyId,
         orderId: it.orderId,
@@ -250,24 +245,27 @@ class OrderRepository {
         productName: it.productName,
         variantLabel: it.variantLabel,
         rate: it.rate,
-        quantity: send,
+        quantity: take,
         discountPercent: it.discountPercent,
         taxPercent: it.taxPercent,
         picked: it.picked,
       ));
-      if (send != it.quantity) {
-        batch.update(_orderItems.doc(it.id),
-            {'quantity': send, 'total': it.rate * send * (1 - it.discountPercent / 100)});
+      if (take != it.quantity) {
+        batch.update(_orderItems.doc(it.id), {
+          'quantity': take,
+          'total': it.rate * take * (1 - it.discountPercent / 100)
+        });
       }
     }
-    final totals = _totalsFor(dispatched, order.globalDiscountPercent);
+    final totals = _totalsFor(packed, order.globalDiscountPercent);
     batch.update(_orders.doc(order.id), {
       'subtotal': totals.subtotal,
       'discountTotal': totals.discountTotal,
       'taxTotal': totals.taxTotal,
       'grandTotal': totals.grandTotal,
-      'itemCount': dispatched.length,
+      'itemCount': packed.length,
       'modified': true,
+      'status': OrderStatus.packed.value,
       'backorderId': back.id,
       'backorderNo': back.orderNo,
       'statusNote': '${shortItems.length} item(s) short — moved to '
@@ -275,9 +273,6 @@ class OrderRepository {
       'updatedAt': FieldValue.serverTimestamp(),
     });
     await batch.commit();
-
-    // 3) Dispatch the original (deducts stock + raw materials for the sent qty).
-    await markDispatched(order, createdBy: createdBy);
     return back;
   }
 
