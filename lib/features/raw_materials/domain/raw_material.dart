@@ -77,3 +77,55 @@ class RawMaterial {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 }
+
+/// A raw-material stock entry (`raw_material_transactions/{id}`). Positive
+/// quantity = stock in (purchase/production/return/opening), negative = consumed.
+class RawMaterialTxn {
+  const RawMaterialTxn({
+    required this.id,
+    required this.companyId,
+    required this.rawMaterialId,
+    required this.variantId,
+    required this.label,
+    required this.unit,
+    required this.quantity,
+    required this.type, // opening | production | purchase | return | adjust | consume
+    this.note,
+    this.createdAt,
+  });
+
+  final String id;
+  final String companyId;
+  final String rawMaterialId;
+  final String variantId;
+  final String label; // variant label (may be empty for a single material)
+  final String unit;
+  final double quantity;
+  final String type;
+  final String? note;
+  final DateTime? createdAt;
+
+  String get typeLabel => switch (type) {
+        'opening' => 'Opening stock',
+        'production' => 'Produced',
+        'purchase' => 'Purchased',
+        'return' => 'Returned',
+        'adjust' => 'Adjusted',
+        'consume' => 'Consumed',
+        _ => type,
+      };
+
+  factory RawMaterialTxn.fromMap(String id, Map<String, dynamic> m) =>
+      RawMaterialTxn(
+        id: id,
+        companyId: m['companyId'] as String? ?? 'default',
+        rawMaterialId: m['rawMaterialId'] as String? ?? '',
+        variantId: m['variantId'] as String? ?? '',
+        label: m['label'] as String? ?? '',
+        unit: m['unit'] as String? ?? '',
+        quantity: (m['quantity'] as num?)?.toDouble() ?? 0,
+        type: m['type'] as String? ?? 'adjust',
+        note: m['note'] as String?,
+        createdAt: (m['createdAt'] as Timestamp?)?.toDate(),
+      );
+}

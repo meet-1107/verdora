@@ -9,6 +9,7 @@ import '../../../core/widgets/state_views.dart';
 import '../data/raw_material_repository.dart';
 import '../domain/raw_material.dart';
 import '../domain/raw_material_variant.dart';
+import 'raw_material_entries_screen.dart';
 import 'raw_material_form_screen.dart';
 import 'raw_material_providers.dart';
 import 'raw_material_stock_sheet.dart';
@@ -48,6 +49,14 @@ class _RawMaterialsScreenState extends ConsumerState<RawMaterialsScreen> {
       appBar: AppBar(
         leading: const AdminMenuButton(),
         title: const Text('Raw Material'),
+        actions: [
+          IconButton(
+            tooltip: 'Stock entries',
+            icon: const Icon(Icons.history),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const RawMaterialEntriesScreen())),
+          ),
+        ],
       ),
       body: async.when(
         loading: () => const LoadingView(),

@@ -37,6 +37,24 @@ class InventoryRepository {
         .toList();
   }
 
+  /// Every stock movement in the company (newest first, sorted client-side to
+  /// avoid a composite index). Used by the entries screen.
+  Stream<List<InventoryTransaction>> watchCompanyTransactions(
+      String companyId) {
+    return _db
+        .collection(Collections.inventoryTransactions)
+        .where('companyId', isEqualTo: companyId)
+        .snapshots()
+        .map((s) {
+      final list = s.docs
+          .map((d) => InventoryTransaction.fromMap(d.id, d.data()))
+          .toList();
+      list.sort((a, b) => (b.createdAt ?? DateTime(2000))
+          .compareTo(a.createdAt ?? DateTime(2000)));
+      return list;
+    });
+  }
+
   /// Transaction history for a single variant, newest first.
   Stream<List<InventoryTransaction>> watchTransactions(String variantId) {
     return _db

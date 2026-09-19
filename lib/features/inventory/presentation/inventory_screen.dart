@@ -14,10 +14,12 @@ import '../../products/domain/product.dart';
 import '../../products/domain/variant.dart';
 import '../../products/presentation/product_form_screen.dart';
 import '../../products/presentation/product_providers.dart';
+import '../../raw_materials/data/raw_material_repository.dart';
 import '../../subcategories/domain/subcategory.dart';
 import '../../subcategories/presentation/subcategory_providers.dart';
 import '../data/inventory_repository.dart';
 import '../domain/inventory_transaction.dart';
+import 'inventory_entries_screen.dart';
 import 'inventory_providers.dart';
 
 // ---- palette (per the requested design) -----------------------------------
@@ -120,6 +122,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 ),
               ],
             ),
+          ),
+          IconButton(
+            tooltip: 'Stock entries',
+            icon: const Icon(Icons.history),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const InventoryEntriesScreen())),
           ),
         ],
       ),
@@ -1011,6 +1019,31 @@ class EditStockSheetState extends ConsumerState<EditStockSheet> {
       if (entered <= 0) return;
       delta = entered;
     }
+    // When this entry ADDS product stock and the size has a bill of materials,
+    // ask whether to also deduct the raw materials used to make them.
+    var deductRaw = false;
+    if (delta > 0 && v.bom.isNotEmpty) {
+      final ans = await showDialog<bool>(
+        context: context,
+        builder: (d) => AlertDialog(
+          title: const Text('Deduct raw material?'),
+          content: Text(
+              'This entry adds ${Formatters.qty(delta)} to stock. Do you also '
+              'want to deduct the raw materials used to make them?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(d, false),
+                child: const Text('No')),
+            FilledButton(
+                onPressed: () => Navigator.pop(d, true),
+                child: const Text('Yes, deduct')),
+          ],
+        ),
+      );
+      if (ans == null) return; // dismissed → cancel
+      deductRaw = ans;
+    }
+
     setState(() => _saving = true);
     try {
       final uid = ref.read(currentUserProvider).valueOrNull?.uid;
@@ -1021,6 +1054,14 @@ class EditStockSheetState extends ConsumerState<EditStockSheet> {
             note: note,
             createdBy: uid,
           );
+      if (deductRaw) {
+        await ref.read(rawMaterialRepositoryProvider).consumeForBom(
+              v.bom,
+              delta,
+              note: 'Used for a product ${_type.value}',
+              createdBy: uid,
+            );
+      }
       if (mounted) Navigator.pop(context);
     } finally {
       if (mounted) setState(() => _saving = false);

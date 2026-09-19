@@ -32,3 +32,19 @@ final variantsOfProvider =
 /// material with named sizes ("1/2", "3/4") is variant-based instead.
 bool isSimpleVariantList(List<RawMaterialVariant> vs) =>
     vs.length == 1 && vs.first.label.trim().isEmpty;
+
+/// The 10 most recent raw-material stock entries for the company.
+final rawRecentTxnsProvider = StreamProvider<List<RawMaterialTxn>>((ref) {
+  final user = ref.watch(currentUserProvider).valueOrNull;
+  if (user == null) return Stream.value(const []);
+  return ref
+      .watch(rawMaterialRepositoryProvider)
+      .watchTxns(user.companyId, limit: 10);
+});
+
+/// Every raw-material stock entry for the company (newest first).
+final rawAllTxnsProvider = StreamProvider<List<RawMaterialTxn>>((ref) {
+  final user = ref.watch(currentUserProvider).valueOrNull;
+  if (user == null) return Stream.value(const []);
+  return ref.watch(rawMaterialRepositoryProvider).watchTxns(user.companyId);
+});

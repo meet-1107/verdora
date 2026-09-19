@@ -30,3 +30,13 @@ final variantTransactionsProvider =
     StreamProvider.family<List<InventoryTransaction>, String>((ref, variantId) {
   return ref.watch(inventoryRepositoryProvider).watchTransactions(variantId);
 });
+
+/// Every stock entry in the company (newest first) — for the entries screen.
+final companyInventoryTxnsProvider =
+    StreamProvider<List<InventoryTransaction>>((ref) {
+  final user = ref.watch(currentUserProvider).valueOrNull;
+  if (user == null) return Stream.value(const []);
+  return ref
+      .watch(inventoryRepositoryProvider)
+      .watchCompanyTransactions(user.companyId);
+});
