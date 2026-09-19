@@ -130,6 +130,27 @@ class RawMaterialRepository {
     }
   }
 
+  /// Adds raw materials for [bom] back to stock for [qty] units (the reverse of
+  /// [consumeForBom]) — e.g. when a product stock adjustment/return reduces the
+  /// product count. Records a `return` entry per variant.
+  Future<void> restoreForBom(List<BomLine> bom, int qty,
+      {String? note, String? createdBy}) async {
+    if (qty <= 0) return;
+    for (final line in bom) {
+      if (line.rawVariantId.isEmpty || line.qty <= 0) continue;
+      final ref = _variants.doc(line.rawVariantId);
+      final snap = await ref.get();
+      if (!snap.exists) continue;
+      final v = RawMaterialVariant.fromMap(snap.id, snap.data()!);
+      final add = line.qty * qty;
+      await ref.update({
+        'currentStock': FieldValue.increment(add),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      await _logTxn(v, v.id, add, 'return', note: note);
+    }
+  }
+
   // ---- entries (history) ----------------------------------------------
   /// Company-wide entries, newest first. [limit] caps the result (0 = all).
   Stream<List<RawMaterialTxn>> watchTxns(String companyId, {int limit = 0}) {

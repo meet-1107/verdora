@@ -1019,29 +1019,34 @@ class EditStockSheetState extends ConsumerState<EditStockSheet> {
       if (entered <= 0) return;
       delta = entered;
     }
-    // When this entry ADDS product stock and the size has a bill of materials,
-    // ask whether to also deduct the raw materials used to make them.
-    var deductRaw = false;
-    if (delta > 0 && v.bom.isNotEmpty) {
+    // If the size has a bill of materials, ask about its raw materials on any
+    // stock change (purchase / production / adjustment / return): adding stock
+    // can DEDUCT raw materials, reducing stock can ADD them back.
+    var applyRaw = false;
+    final adding = delta > 0;
+    if (v.bom.isNotEmpty && delta != 0) {
       final ans = await showDialog<bool>(
         context: context,
         builder: (d) => AlertDialog(
-          title: const Text('Deduct raw material?'),
-          content: Text(
-              'This entry adds ${Formatters.qty(delta)} to stock. Do you also '
-              'want to deduct the raw materials used to make them?'),
+          title:
+              Text(adding ? 'Deduct raw material?' : 'Return raw material?'),
+          content: Text(adding
+              ? 'This entry adds ${Formatters.qty(delta)} to stock. Do you '
+                  'also want to deduct the raw materials used to make them?'
+              : 'This entry reduces stock by ${Formatters.qty(-delta)}. Do you '
+                  'also want to add the raw materials back to stock?'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(d, false),
                 child: const Text('No')),
             FilledButton(
                 onPressed: () => Navigator.pop(d, true),
-                child: const Text('Yes, deduct')),
+                child: Text(adding ? 'Yes, deduct' : 'Yes, add back')),
           ],
         ),
       );
       if (ans == null) return; // dismissed → cancel
-      deductRaw = ans;
+      applyRaw = ans;
     }
 
     setState(() => _saving = true);
@@ -1054,13 +1059,15 @@ class EditStockSheetState extends ConsumerState<EditStockSheet> {
             note: note,
             createdBy: uid,
           );
-      if (deductRaw) {
-        await ref.read(rawMaterialRepositoryProvider).consumeForBom(
-              v.bom,
-              delta,
-              note: 'Used for a product ${_type.value}',
-              createdBy: uid,
-            );
+      if (applyRaw) {
+        final rawRepo = ref.read(rawMaterialRepositoryProvider);
+        if (adding) {
+          await rawRepo.consumeForBom(v.bom, delta,
+              note: 'Used for a product ${_type.value}', createdBy: uid);
+        } else {
+          await rawRepo.restoreForBom(v.bom, -delta,
+              note: 'Returned from a product ${_type.value}', createdBy: uid);
+        }
       }
       if (mounted) Navigator.pop(context);
     } finally {
