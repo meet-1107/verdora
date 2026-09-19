@@ -101,6 +101,8 @@ class _CategoryTile extends ConsumerWidget {
           onSelected: (v) => _onAction(context, ref, v),
           itemBuilder: (_) => const [
             PopupMenuItem(value: 'edit', child: Text('Edit')),
+            PopupMenuItem(
+                value: 'convert', child: Text('Convert to subcategory')),
             PopupMenuItem(value: 'delete', child: Text('Delete')),
           ],
         ),
@@ -116,6 +118,8 @@ class _CategoryTile extends ConsumerWidget {
     switch (action) {
       case 'edit':
         CategoriesScreen._openForm(context, ref, existing: category);
+      case 'convert':
+        await _convertToSubcategory(context, ref);
       case 'delete':
         final ok = await showDialog<bool>(
           context: context,
@@ -133,6 +137,71 @@ class _CategoryTile extends ConsumerWidget {
           ),
         );
         if (ok == true) await repo.delete(category.id);
+    }
+  }
+
+  Future<void> _convertToSubcategory(
+      BuildContext context, WidgetRef ref) async {
+    final cats = (ref.read(categoriesProvider).valueOrNull ?? const [])
+        .where((c) => c.id != category.id)
+        .toList();
+    if (cats.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Create another category to move this under.')));
+      return;
+    }
+    String? target = cats.first.id;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setLocal) => AlertDialog(
+          title: const Text('Convert to subcategory'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('"${category.name}" will become a subcategory under the '
+                  'category you pick. Its products move too — nothing is '
+                  'deleted.'),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: target,
+                isExpanded: true,
+                decoration:
+                    const InputDecoration(labelText: 'Parent category'),
+                items: [
+                  for (final c in cats)
+                    DropdownMenuItem(value: c.id, child: Text(c.name)),
+                ],
+                onChanged: (v) => setLocal(() => target = v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Convert')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || target == null) return;
+    try {
+      await ref
+          .read(categoryRepositoryProvider)
+          .categoryToSubcategory(category, target!);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Converted to a subcategory.')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Convert failed: $e')));
+      }
     }
   }
 }

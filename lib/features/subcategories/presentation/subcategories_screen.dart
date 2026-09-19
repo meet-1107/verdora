@@ -7,6 +7,7 @@ import '../../../core/widgets/app_thumb.dart';
 import '../../../core/widgets/image_upload_field.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_providers.dart';
+import '../../categories/data/category_repository.dart';
 import '../../categories/domain/category.dart';
 import '../../categories/presentation/category_providers.dart';
 import '../data/subcategory_repository.dart';
@@ -71,6 +72,9 @@ class SubcategoriesScreen extends ConsumerWidget {
                     onSelected: (v) => _onAction(context, ref, v, s, cats),
                     itemBuilder: (_) => const [
                       PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(
+                          value: 'convert',
+                          child: Text('Convert to category')),
                       PopupMenuItem(value: 'delete', child: Text('Delete')),
                     ],
                   ),
@@ -92,6 +96,36 @@ class SubcategoriesScreen extends ConsumerWidget {
       _openForm(context, ref, categories: cats, existing: s);
     } else if (action == 'delete') {
       await repo.delete(s.id);
+    } else if (action == 'convert') {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Convert to category'),
+          content: Text('"${s.name}" will become a top-level category. Its '
+              'products move to the new category — nothing is deleted.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Convert')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      try {
+        await ref.read(categoryRepositoryProvider).subcategoryToCategory(s);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Converted to a category.')));
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Convert failed: $e')));
+        }
+      }
     }
   }
 
