@@ -12,6 +12,7 @@ import '../../import_engine/logic/product_import_config.dart';
 import '../../import_engine/logic/product_import_executor.dart';
 import '../../import_engine/presentation/import_screen.dart';
 import '../../import_engine/presentation/zip_image_import_screen.dart';
+import '../../inventory/presentation/inventory_entries_screen.dart';
 import '../../inventory/presentation/inventory_providers.dart';
 import '../../inventory/presentation/inventory_screen.dart';
 import '../../subcategories/domain/subcategory.dart';
@@ -116,6 +117,12 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
         leading: const AdminMenuButton(),
         title: const Text('Products'),
         actions: [
+          IconButton(
+            tooltip: 'Stock entries',
+            icon: const Icon(Icons.history),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const InventoryEntriesScreen())),
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.upload_file),
             tooltip: 'Import',
