@@ -167,11 +167,20 @@ class _ProductsScreenState extends ConsumerState<ProductsScreen> {
                               fallbackIcon: Icons.folder_rounded,
                               title: c.name,
                               subtitle: '${countByCat[c.id] ?? 0} product(s)',
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (_) =>
-                                        _SubcategoryProductsScreen(category: c)),
-                              ),
+                              onTap: () {
+                                // No subcategories → go straight to products.
+                                final subs =
+                                    ref.read(subcategoriesProvider).valueOrNull ??
+                                        const [];
+                                final hasSubs = subs.any(
+                                    (s) => s.categoryId == c.id && s.isActive);
+                                Navigator.of(context).push(MaterialPageRoute(
+                                  builder: (_) => hasSubs
+                                      ? _SubcategoryProductsScreen(category: c)
+                                      : _ProductListScreen(
+                                          category: c, subcategory: null),
+                                ));
+                              },
                             );
                           },
                         ),

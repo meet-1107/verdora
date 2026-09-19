@@ -177,13 +177,23 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                           icon: Icons.folder_rounded,
                           title: c.name,
                           subtitle: '${countByCat[c.id] ?? 0} product(s)',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  _SubcategoriesInventoryScreen(category: c),
-                            ),
-                          ),
+                          onTap: () {
+                            // No subcategories → go straight to products.
+                            final subs =
+                                ref.read(subcategoriesProvider).valueOrNull ??
+                                    const [];
+                            final hasSubs = subs.any(
+                                (s) => s.categoryId == c.id && s.isActive);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => hasSubs
+                                    ? _SubcategoriesInventoryScreen(category: c)
+                                    : _ProductsInventoryScreen(
+                                        category: c, subcategory: null),
+                              ),
+                            );
+                          },
                         );
                       },
                     ),
