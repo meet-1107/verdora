@@ -165,6 +165,20 @@ class RawMaterialRepository {
     });
   }
 
+  /// Deletes stock entries (history records only; stock is unchanged).
+  Future<void> deleteTxns(Iterable<String> ids) async {
+    final list = ids.toList();
+    const chunk = 400;
+    for (var i = 0; i < list.length; i += chunk) {
+      final end = (i + chunk) < list.length ? (i + chunk) : list.length;
+      final batch = _db.batch();
+      for (final id in list.sublist(i, end)) {
+        batch.delete(_txns.doc(id));
+      }
+      await batch.commit();
+    }
+  }
+
   Future<void> _logTxn(
       RawMaterialVariant v, String variantId, double quantity, String type,
       {String? note}) {

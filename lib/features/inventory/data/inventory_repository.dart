@@ -67,6 +67,21 @@ class InventoryRepository {
             .toList());
   }
 
+  /// Deletes stock entries (history records only; cached stock is unchanged).
+  Future<void> deleteTransactions(Iterable<String> ids) async {
+    final list = ids.toList();
+    const chunk = 400;
+    for (var i = 0; i < list.length; i += chunk) {
+      final end = (i + chunk) < list.length ? (i + chunk) : list.length;
+      final batch = _db.batch();
+      for (final id in list.sublist(i, end)) {
+        batch.delete(
+            _db.collection(Collections.inventoryTransactions).doc(id));
+      }
+      await batch.commit();
+    }
+  }
+
   /// One-time cleanup: any variant whose cached stock drifted below zero is
   /// reset to zero. Cheap — only negative docs match. Safe to call repeatedly.
   Future<void> zeroNegativeStock(String companyId) async {
